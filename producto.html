@@ -76,24 +76,44 @@ async function loadProduct() {
   const groups = {};
   (variants || []).forEach(v => { (groups[v.name] = groups[v.name] || []).push(v); });
 
+  let comboItems = [];
+  if (product.is_combo) {
+    const { data: items } = await supabase.from('combo_items').select('*, products(name, image_url)').eq('combo_id', product.id);
+    comboItems = items || [];
+  }
+
   const images = (product.images && product.images.length) ? product.images : (product.image_url ? [product.image_url] : []);
 
   content.innerHTML = `
     <div class="breadcrumb"><a href="index.html">Inicio</a> / <a href="index.html#catalogo">Catálogo</a> / ${product.categories ? product.categories.name + ' / ' : ''}${product.name}</div>
-    <div class="product-detail">
+    <div class="product-detail ${product.is_combo ? 'is-combo' : ''}">
       <div>
         <div class="tilt-stage" id="gallery-tilt-stage">
-          <div class="detail-gallery" id="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<span style="font-size:4rem">💄</span>`}</div>
+          <div class="detail-gallery" id="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<span style="font-size:4rem">${product.is_combo ? '🎁' : '💄'}</span>`}</div>
         </div>
         ${images.length > 1 ? `<div class="gallery-thumbs">${images.map((url, i) => `<img src="${url}" class="${i === 0 ? 'active' : ''}" data-thumb="${i}">`).join('')}</div>` : ''}
       </div>
       <div class="detail-info">
+        ${product.is_combo ? '<span class="badge-combo" style="position:static;display:inline-block;margin-bottom:8px">🎁 Combo</span>' : ''}
         <span class="product-cat">${product.categories ? product.categories.name : 'Kori Cosmetics'}</span>
         <h1>${product.name}</h1>
         <p style="color:var(--text-soft)">${product.description || ''}</p>
         <div class="detail-price" id="detail-price">${formatPrice(product.price)}</div>
         <div id="variant-groups"></div>
-        <div class="flex gap-8" style="align-items:center;margin-bottom:20px">
+        ${comboItems.length ? `
+          <div class="combo-includes">
+            <label>Este combo incluye</label>
+            <div class="combo-includes-list">
+              ${comboItems.map(ci => `
+                <div class="combo-include-item">
+                  ${(ci.image_url || (ci.products && ci.products.image_url)) ? `<img src="${ci.image_url || ci.products.image_url}" alt="">` : ''}
+                  <span>${ci.quantity} × ${esc(ci.products ? ci.products.name : 'Producto')}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        <div class="flex gap-8" style="align-items:center;margin:20px 0">
           <div class="qty-control">
             <button id="qty-down">−</button><span id="qty-val">1</span><button id="qty-up">+</button>
           </div>
