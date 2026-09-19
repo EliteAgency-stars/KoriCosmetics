@@ -565,22 +565,31 @@ async function openVariantsModal(productId) {
   const product = state.products.find(p => p.id === productId);
   const { data } = await supabase.from('product_variants').select('*').eq('product_id', productId).order('created_at');
   const variants = data || [];
+  // Todas las opciones de un producto comparten un solo "nombre" (ej. "Tono"),
+  // para que en la tienda se muestren juntas en una sola fila en vez de
+  // aparecer como grupos sueltos.
+  const existingNames = [...new Set(variants.map(v => v.name))];
+  const sharedName = existingNames.length === 1 ? existingNames[0] : (existingNames[0] || 'Tono');
+
   openModal(`
     <h3>Variantes — ${esc(product.name)}</h3>
+    <p style="color:var(--text-soft);font-size:.85rem;margin:-6px 0 16px">Ej: los tonos de un labial, o los tamaños de un kit. Deja el precio vacío si esa opción cuesta igual que el producto (${formatPrice(product.price)}); ponle 0 de stock si por ahora no hay disponibilidad.</p>
     <table style="margin-bottom:16px">
-      <thead><tr><th>Nombre</th><th>Valor</th><th>Ajuste $</th><th>Stock</th><th></th></tr></thead>
-      <tbody id="variant-rows">
+      <thead><tr><th>Nombre</th><th>Valor</th><th>Precio</th><th>Stock</th><th></th></tr></thead>
+      <tbody>
         ${variants.map(v => `<tr>
-          <td>${esc(v.name)}</td><td>${esc(v.value)}</td><td>${formatPrice(v.price_adjustment)}</td><td>${v.stock}</td>
+          <td>${esc(v.name)}</td><td>${esc(v.value)}</td>
+          <td>${v.price_override != null ? formatPrice(v.price_override) : `<span style="color:var(--text-soft)">Igual al producto</span>`}</td>
+          <td>${v.stock > 0 ? v.stock : '<span class="tag tag-red">Agotado</span>'}</td>
           <td><button class="btn btn-ghost btn-sm" data-del-variant="${v.id}">Eliminar</button></td>
-        </tr>`).join('') || '<tr><td colspan="5" class="empty-state">Sin variantes</td></tr>'}
+        </tr>`).join('') || '<tr><td colspan="5" class="empty-state">Sin variantes todavía</td></tr>'}
       </tbody>
     </table>
     <form id="variant-form">
       <div class="form-grid">
-        <div class="field"><label>Nombre (ej. Color)</label><input name="name" required></div>
-        <div class="field"><label>Valor (ej. Rojo Pasión)</label><input name="value" required></div>
-        <div class="field"><label>Ajuste de precio</label><input type="number" name="price_adjustment" value="0"></div>
+        <div class="field full"><label>Nombre de la variante (igual para todas las opciones)</label><input name="name" value="${esc(sharedName)}" required></div>
+        <div class="field"><label>Valor (ej. "Caramelo")</label><input name="value" required></div>
+        <div class="field"><label>Precio de esta opción (opcional)</label><input type="number" step="0.01" name="price_override" placeholder="Igual que el producto"></div>
         <div class="field"><label>Stock</label><input type="number" name="stock" value="0"></div>
       </div>
       <div class="modal-actions">
@@ -593,9 +602,11 @@ async function openVariantsModal(productId) {
   qs('#variant-form').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const priceRaw = fd.get('price_override');
     const { error } = await supabase.from('product_variants').insert({
       product_id: productId, name: fd.get('name'), value: fd.get('value'),
-      price_adjustment: Number(fd.get('price_adjustment')) || 0, stock: Number(fd.get('stock')) || 0,
+      price_override: priceRaw === '' ? null : Number(priceRaw),
+      stock: Number(fd.get('stock')) || 0,
     });
     if (error) return alert('Error: ' + error.message);
     openVariantsModal(productId);
