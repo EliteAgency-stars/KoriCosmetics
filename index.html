@@ -10,6 +10,8 @@
 </head>
 <body>
 
+<div id="y2k-decor" aria-hidden="true"></div>
+
 <nav class="navbar">
   <div class="container">
     <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> Kori Cosmetics</a>
@@ -39,6 +41,14 @@
     <div class="floating-card"><img src="logo.png" alt="Kori Cosmetics"></div>
   </div>
 </header>
+
+<section class="promo-banner container">
+  <div class="promo-inner">
+    <h2 class="y2k-text">Amor &amp; Amistad 💘</h2>
+    <p class="promo-sub">Promos especiales en tus productos favoritos ✨ del 15 al 30 de septiembre</p>
+    <a href="#catalogo" class="btn btn-primary">Ver promociones</a>
+  </div>
+</section>
 
 <section id="features">
   <div class="container">
@@ -77,11 +87,54 @@
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
 
+// ---------- Decoración Y2K: destellos y espirales en los bordes ----------
+const Y2K_SPARKLE = `<svg viewBox="0 0 100 100" fill="currentColor"><path d="M50 0 C52 30 70 48 100 50 C70 52 52 70 50 100 C48 70 30 52 0 50 C30 48 48 30 50 0 Z"/></svg>`;
+const Y2K_SWIRL = `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"><path d="M52 92 C20 92 8 58 26 36 C40 18 68 22 70 44 C71 60 54 64 48 52"/></svg>`;
+
+const Y2K_ICONS = [
+  { side: 'left',  top: '9vh',  size: 30, rot: -12, depth: 14, shape: Y2K_SPARKLE },
+  { side: 'left',  top: '30vh', size: 44, rot: 8,   depth: 24, shape: Y2K_SWIRL },
+  { side: 'left',  top: '55vh', size: 20, rot: 18,  depth: 10, shape: Y2K_SPARKLE },
+  { side: 'left',  top: '80vh', size: 34, rot: -6,  depth: 18, shape: Y2K_SPARKLE },
+  { side: 'right', top: '14vh', size: 22, rot: -20, depth: 12, shape: Y2K_SPARKLE },
+  { side: 'right', top: '38vh', size: 32, rot: 10,  depth: 20, shape: Y2K_SPARKLE },
+  { side: 'right', top: '62vh', size: 42, rot: -8,  depth: 24, shape: Y2K_SWIRL },
+  { side: 'right', top: '88vh', size: 24, rot: 14,  depth: 10, shape: Y2K_SPARKLE },
+];
+
+const decorRoot = document.getElementById('y2k-decor');
+decorRoot.innerHTML = Y2K_ICONS.map((icon, i) => `
+  <div class="y2k-icon" data-depth="${icon.depth}" data-rot="${icon.rot}"
+       style="${icon.side}: 14px; top: ${icon.top}; width: ${icon.size}px; height: ${icon.size}px; transform: rotate(${icon.rot}deg);">
+    ${icon.shape}
+  </div>
+`).join('');
+
+const y2kIcons = qsa('.y2k-icon');
+window.addEventListener('mousemove', e => {
+  const nx = (e.clientX / window.innerWidth) - 0.5;
+  const ny = (e.clientY / window.innerHeight) - 0.5;
+  y2kIcons.forEach(icon => {
+    const depth = Number(icon.dataset.depth);
+    const rot = Number(icon.dataset.rot);
+    icon.style.transform = `rotate(${rot}deg) translate(${nx * depth}px, ${ny * depth}px)`;
+  });
+});
+
 const FEATURES = [
-  ['✨', 'Resalta tu belleza', 'Realza tus mejores rasgos y luce una versión más segura de ti.'],
-  ['💖', 'Cuida tu piel', 'Dale a tu rostro el cuidado que merece para sentirte increíble cada día.'],
-  ['🌸', 'Atiende las necesidades de tu rostro', 'Soluciones pensadas para cuidar, consentir y transformar tu piel.'],
-  ['👑', 'Siéntete más segura de ti', 'Porque verte bien también es sentirte bien contigo misma.'],
+  ['🖥️', 'Uso desde el computador', 'Administra tu tienda desde cualquier equipo, sin instalar nada.'],
+  ['💵', 'Registro de ventas y gastos', 'Lleva el control de todo lo que entra y sale de tu negocio.'],
+  ['🧾', 'Comprobantes de ventas y gastos', 'Cada movimiento genera su propio número de comprobante.'],
+  ['📦', 'Registro de inventario', 'Controla existencias y costos de cada producto en tiempo real.'],
+  ['🛍️', 'Catálogo virtual', 'Tu vitrina online, siempre disponible para tus clientes.'],
+  ['📋', 'Cotizaciones ilimitadas', 'Genera todas las cotizaciones que necesites, sin límites.'],
+  ['🧑‍🤝‍🧑', 'Creación de clientes', 'Guarda los datos de tus clientes para fidelizarlos.'],
+  ['🚚', 'Creación de proveedores', 'Organiza a tus proveedores y sus datos de contacto.'],
+  ['👥', 'Añadir empleados ilimitados', 'Suma a todo tu equipo sin restricciones.'],
+  ['📊', 'Descargar reportes', 'Exporta tu información en CSV cuando la necesites.'],
+  ['📈', 'Acceso a estadísticas', 'Descubre qué productos buscan y ven más tus clientes.'],
+  ['🎨', 'Variantes en productos', 'Colores, tonos y presentaciones para cada producto.'],
+  ['🧮', 'Facturación electrónica', 'Preparado para integrarse con tu proveedor autorizado DIAN.'],
 ];
 
 document.getElementById('features-grid').innerHTML = FEATURES.map(([icon, title, desc]) => `
