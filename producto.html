@@ -27,6 +27,15 @@
 
 <footer><div class="container"><p>© <span id="year"></span> Kori Cosmetics.</p></div></footer>
 
+<nav class="mobile-nav">
+  <div class="mobile-nav-inner">
+    <a href="index.html" class="mobile-nav-item"><span class="icon">🏠</span><span>Inicio</span></a>
+    <a href="index.html#catalogo" class="mobile-nav-item active"><span class="icon">🗂️</span><span>Catálogo</span></a>
+    <a href="index.html?search=1#catalogo" class="mobile-nav-item"><span class="icon">🔍</span><span>Buscar</span></a>
+    <a href="carrito.html" class="mobile-nav-item"><span class="icon">🛍️</span><span class="cart-count" style="display:none">0</span><span>Carrito</span></a>
+  </div>
+</nav>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/app.js"></script>
 <script>
@@ -73,7 +82,9 @@ async function loadProduct() {
     <div class="breadcrumb"><a href="index.html">Inicio</a> / <a href="index.html#catalogo">Catálogo</a> / ${product.categories ? product.categories.name + ' / ' : ''}${product.name}</div>
     <div class="product-detail">
       <div>
-        <div class="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<span style="font-size:4rem">💄</span>`}</div>
+        <div class="tilt-stage" id="gallery-tilt-stage">
+          <div class="detail-gallery" id="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<span style="font-size:4rem">💄</span>`}</div>
+        </div>
         ${images.length > 1 ? `<div class="gallery-thumbs">${images.map((url, i) => `<img src="${url}" class="${i === 0 ? 'active' : ''}" data-thumb="${i}">`).join('')}</div>` : ''}
       </div>
       <div class="detail-info">
@@ -99,21 +110,47 @@ async function loadProduct() {
     t.classList.add('active');
   }));
 
+  // Efecto 3D: la foto principal se inclina siguiendo el mouse.
+  const galleryStage = qs('#gallery-tilt-stage');
+  const galleryCard = qs('#detail-gallery');
+  galleryStage.addEventListener('mousemove', e => {
+    const rect = galleryStage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    galleryCard.style.transform = `rotateY(${x * 14}deg) rotateX(${-y * 14}deg) scale(1.02)`;
+  });
+  galleryStage.addEventListener('mouseleave', () => { galleryCard.style.transform = 'rotateY(0) rotateX(0) scale(1)'; });
+
   let selectedVariant = null;
-  let priceAdjustment = 0;
+  let currentPrice = product.price;
   const variantWrap = qs('#variant-groups');
-  Object.entries(groups).forEach(([name, options]) => {
+
+  // Si cada "grupo" quedó guardado con una sola opción (ej. cada tono se
+  // guardó con su propio nombre en vez de compartir uno), se muestran todas
+  // juntas en una sola fila en vez de una debajo de la otra.
+  const groupEntries = Object.entries(groups);
+  const shouldFlatten = groupEntries.length > 1 && groupEntries.every(([, arr]) => arr.length === 1);
+  const displayGroups = shouldFlatten ? [['Elige una opción', variants]] : groupEntries;
+
+  displayGroups.forEach(([name, options]) => {
     const div = document.createElement('div');
     div.className = 'variant-group';
-    div.innerHTML = `<label>${name}</label><div class="variant-options">${options.map(o => `<span class="variant-chip" data-value="${esc(o.value)}" data-adjust="${o.price_adjustment}">${o.value}</span>`).join('')}</div>`;
+    div.innerHTML = `<label>${esc(name)}</label><div class="variant-options">${options.map(o => {
+      const outOfStock = o.stock <= 0;
+      const priceValue = o.price_override != null ? o.price_override : '';
+      return `<span class="variant-chip ${outOfStock ? 'disabled' : ''}" data-value="${esc(o.value)}" data-price="${priceValue}" ${outOfStock ? 'title="Agotado"' : ''}>${esc(o.value)}${outOfStock ? ' (agotado)' : ''}</span>`;
+    }).join('')}</div>`;
     variantWrap.appendChild(div);
   });
-  qsa('.variant-chip', variantWrap).forEach(chip => chip.addEventListener('click', () => {
+
+  qsa('.variant-chip:not(.disabled)', variantWrap).forEach(chip => chip.addEventListener('click', () => {
     qsa('.variant-chip', chip.closest('.variant-group')).forEach(c => c.classList.remove('selected'));
     chip.classList.add('selected');
     selectedVariant = chip.dataset.value;
-    priceAdjustment = Number(chip.dataset.adjust) || 0;
-    qs('#detail-price').textContent = formatPrice(product.price + priceAdjustment);
+    // Cada variante es independiente: si no tiene precio propio, el precio
+    // del producto queda exactamente como estaba, sin sumas ni ajustes.
+    currentPrice = chip.dataset.price !== '' ? Number(chip.dataset.price) : product.price;
+    qs('#detail-price').textContent = formatPrice(currentPrice);
   }));
 
   let qty = 1;
@@ -122,7 +159,7 @@ async function loadProduct() {
 
   qs('#add-to-cart').addEventListener('click', () => {
     addToCart({
-      id: product.id, name: product.name, price: product.price + priceAdjustment,
+      id: product.id, name: product.name, price: currentPrice,
       image: product.image_url, variant: selectedVariant, qty,
     });
     const btn = qs('#add-to-cart');
