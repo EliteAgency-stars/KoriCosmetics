@@ -63,10 +63,20 @@
         <h2>Productos</h2>
         <div class="flex gap-8">
           <button class="btn btn-outline btn-sm" id="btn-import-csv">📥 Importar CSV</button>
+          <button class="btn btn-outline btn-sm" id="btn-new-combo">🎁 Nuevo combo</button>
           <button class="btn btn-primary btn-sm" id="btn-new-product">+ Nuevo producto</button>
         </div>
       </div>
       <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+      <div class="filter-bar">
+        <input type="text" id="product-filter-search" placeholder="Buscar por nombre...">
+        <select id="product-filter-sort">
+          <option value="recent">Más reciente</option>
+          <option value="price-asc">Precio: menor a mayor</option>
+          <option value="price-desc">Precio: mayor a menor</option>
+          <option value="name-asc">Nombre: A-Z</option>
+        </select>
+      </div>
       <div class="panel"><table id="table-productos"><thead></thead><tbody></tbody></table></div>
     </section>
 
