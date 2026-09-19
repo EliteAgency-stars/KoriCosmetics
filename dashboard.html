@@ -54,7 +54,14 @@
     </section>
 
     <section class="tab-panel hidden" id="tab-productos">
-      <div class="dash-header"><h2>Productos</h2><button class="btn btn-primary btn-sm" id="btn-new-product">+ Nuevo producto</button></div>
+      <div class="dash-header">
+        <h2>Productos</h2>
+        <div class="flex gap-8">
+          <button class="btn btn-outline btn-sm" id="btn-import-csv">📥 Importar CSV</button>
+          <button class="btn btn-primary btn-sm" id="btn-new-product">+ Nuevo producto</button>
+        </div>
+      </div>
+      <input type="file" id="csv-file-input" accept=".csv" class="hidden">
       <div class="panel"><table id="table-productos"><thead></thead><tbody></tbody></table></div>
     </section>
 
@@ -126,6 +133,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/dashboard.js"></script>
 </body>
