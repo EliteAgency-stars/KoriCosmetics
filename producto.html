@@ -67,10 +67,15 @@ async function loadProduct() {
   const groups = {};
   (variants || []).forEach(v => { (groups[v.name] = groups[v.name] || []).push(v); });
 
+  const images = (product.images && product.images.length) ? product.images : (product.image_url ? [product.image_url] : []);
+
   content.innerHTML = `
     <div class="breadcrumb"><a href="index.html">Inicio</a> / <a href="index.html#catalogo">Catálogo</a> / ${product.categories ? product.categories.name + ' / ' : ''}${product.name}</div>
     <div class="product-detail">
-      <div class="detail-gallery">${product.image_url ? `<img src="${product.image_url}" alt="${product.name}">` : `<span style="font-size:4rem">💄</span>`}</div>
+      <div>
+        <div class="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<span style="font-size:4rem">💄</span>`}</div>
+        ${images.length > 1 ? `<div class="gallery-thumbs">${images.map((url, i) => `<img src="${url}" class="${i === 0 ? 'active' : ''}" data-thumb="${i}">`).join('')}</div>` : ''}
+      </div>
       <div class="detail-info">
         <span class="product-cat">${product.categories ? product.categories.name : 'Kori Cosmetics'}</span>
         <h1>${product.name}</h1>
@@ -87,6 +92,12 @@ async function loadProduct() {
       </div>
     </div>
   `;
+
+  qsa('[data-thumb]').forEach(t => t.addEventListener('click', () => {
+    qs('#gallery-main-img').src = images[Number(t.dataset.thumb)];
+    qsa('[data-thumb]').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+  }));
 
   let selectedVariant = null;
   let priceAdjustment = 0;
