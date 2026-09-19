@@ -36,13 +36,16 @@ function initTabs() {
 // ============================================================
 // Modal helpers
 // ============================================================
-function openModal(html) {
-  qs('#modal-content').innerHTML = html;
+function openModal(html, { wide = false } = {}) {
+  const content = qs('#modal-content');
+  content.className = 'modal' + (wide ? ' modal-wide' : '');
+  content.innerHTML = html;
   qs('#modal-overlay').classList.remove('hidden');
 }
 function closeModal() {
   qs('#modal-overlay').classList.add('hidden');
   qs('#modal-content').innerHTML = '';
+  qs('#modal-content').className = 'modal';
 }
 qs('#modal-overlay').addEventListener('click', e => { if (e.target.id === 'modal-overlay') closeModal(); });
 
@@ -109,17 +112,11 @@ const ENTITIES = {
     columns: [
       ['receipt_number','Comprobante'],
       ['type','Tipo', v => v === 'venta' ? '<span class="tag tag-green">Venta</span>' : '<span class="tag tag-red">Gasto</span>'],
-      ['concept','Concepto'], ['amount','Monto', v => formatPrice(v)],
+      [row => row.product_id ? `${(state.products.find(p => p.id === row.product_id) || {}).name || 'Producto eliminado'} × ${row.quantity}` : row.concept, 'Detalle'],
+      ['amount','Monto', v => formatPrice(v)],
       ['created_at','Fecha', v => new Date(v).toLocaleDateString('es-CO')],
     ],
-    fields: [
-      { key:'type', label:'Tipo', type:'select', options:[['venta','Venta'],['gasto','Gasto']], required:true },
-      { key:'concept', label:'Concepto', type:'text', required:true, full:true },
-      { key:'amount', label:'Monto', type:'number', required:true },
-      { key:'category', label:'Categoría', type:'text' },
-      { key:'notes', label:'Notas', type:'text', full:true },
-    ],
-    noEdit: true, // los movimientos no se editan, solo se registran y consultan
+    noEdit: true, // los movimientos no se editan (afectarían el inventario dos veces); solo se registran y consultan
   },
   quotes: {
     label: 'cotización', table: 'quotes', tableId: 'table-quotes', order: 'created_at',
@@ -159,7 +156,10 @@ function genericRender(key) {
   }
   table.querySelector('tbody').innerHTML = rows.map(row => `
     <tr>
-      ${cfg.columns.map(c => `<td>${c[2] ? c[2](row[c[0]]) : esc(row[c[0]])}</td>`).join('')}
+      ${cfg.columns.map(c => {
+        const raw = typeof c[0] === 'function' ? c[0](row) : row[c[0]];
+        return `<td>${c[2] ? c[2](raw) : esc(raw)}</td>`;
+      }).join('')}
       <td class="table-actions">
         ${cfg.noEdit ? '' : `<button class="btn btn-ghost btn-sm" data-edit="${key}:${row.id}">Editar</button>`}
         <button class="btn btn-ghost btn-sm" data-del="${key}:${row.id}">Eliminar</button>
@@ -243,6 +243,120 @@ document.addEventListener('click', async e => {
 });
 
 // ============================================================
+// Ventas y gastos: registrar una venta eligiendo producto + cantidad
+// (el monto y el descuento de inventario se calculan solos, para que
+// todo — stock, comprobante y reporte — coincida siempre).
+// ============================================================
+function openTransactionModal() {
+  const products = (state.products || []).filter(p => p.active);
+
+  openModal(`
+    <h3>Registrar movimiento</h3>
+    <form id="transaction-form">
+      <div class="field"><label>Tipo</label>
+        <select id="tx-type">
+          <option value="venta">Venta</option>
+          <option value="gasto">Gasto</option>
+        </select>
+      </div>
+      <div class="field" id="tx-product-field">
+        <label>Producto</label>
+        <select id="tx-product">
+          <option value="">Venta manual (sin producto del catálogo)</option>
+          ${products.map(p => `<option value="${p.id}" data-price="${p.price}" data-stock="${p.stock}" data-name="${esc(p.name)}">${esc(p.name)} · ${formatPrice(p.price)} · stock ${p.stock}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-grid">
+        <div class="field" id="tx-qty-field"><label>Cantidad</label><input type="number" id="tx-qty" min="1" value="1"></div>
+        <div class="field"><label>Monto</label><input type="number" id="tx-amount" step="0.01" required></div>
+      </div>
+      <div class="field full"><label>Concepto</label><input type="text" id="tx-concept" required></div>
+      <div class="form-grid">
+        <div class="field"><label>Categoría</label><input type="text" id="tx-category"></div>
+        <div class="field"><label>Notas</label><input type="text" id="tx-notes"></div>
+      </div>
+      <p class="form-msg" id="tx-hint"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  `);
+
+  const typeEl = qs('#tx-type');
+  const productEl = qs('#tx-product');
+  const qtyField = qs('#tx-qty-field');
+  const qtyEl = qs('#tx-qty');
+  const amountEl = qs('#tx-amount');
+  const conceptEl = qs('#tx-concept');
+  const hintEl = qs('#tx-hint');
+
+  function selectedProduct() {
+    const opt = productEl.selectedOptions[0];
+    return opt && opt.value ? { id: opt.value, price: Number(opt.dataset.price), stock: Number(opt.dataset.stock), name: opt.dataset.name } : null;
+  }
+
+  function sync() {
+    const isVenta = typeEl.value === 'venta';
+    qs('#tx-product-field').classList.toggle('hidden', !isVenta);
+    const product = isVenta ? selectedProduct() : null;
+
+    qtyField.classList.toggle('hidden', !product);
+    hintEl.className = 'form-msg';
+
+    if (product) {
+      const qty = Number(qtyEl.value) || 1;
+      conceptEl.value = `${product.name} × ${qty}`;
+      conceptEl.readOnly = true;
+      amountEl.value = product.price * qty;
+      amountEl.readOnly = true;
+      hintEl.textContent = `Precio unitario: ${formatPrice(product.price)} · Stock disponible: ${product.stock}`;
+      if (qty > product.stock) { hintEl.classList.add('error'); hintEl.textContent += ' — ¡supera el stock disponible!'; }
+    } else {
+      conceptEl.readOnly = false;
+      amountEl.readOnly = false;
+    }
+  }
+
+  typeEl.addEventListener('change', sync);
+  productEl.addEventListener('change', sync);
+  qtyEl.addEventListener('input', sync);
+  qs('#modal-cancel').addEventListener('click', closeModal);
+  sync();
+
+  qs('#transaction-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const product = typeEl.value === 'venta' ? selectedProduct() : null;
+    const qty = product ? (Number(qtyEl.value) || 1) : null;
+
+    if (product && qty > product.stock) {
+      if (!confirm(`Solo hay ${product.stock} unidades de "${product.name}" en stock. ¿Registrar la venta de todas formas?`)) return;
+    }
+
+    const payload = {
+      type: typeEl.value,
+      concept: conceptEl.value,
+      product_id: product ? product.id : null,
+      quantity: qty,
+      amount: Number(amountEl.value) || 0,
+      category: qs('#tx-category').value || null,
+      notes: qs('#tx-notes').value || null,
+    };
+
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const { error } = await supabase.from('transactions').insert(payload);
+    submitBtn.disabled = false;
+    if (error) { alert('Error: ' + error.message); return; }
+    closeModal();
+    genericLoad('transactions');
+    loadProducts(); // el stock puede haber cambiado
+  });
+}
+
+qs('#btn-new-transaction').addEventListener('click', openTransactionModal);
+
+// ============================================================
 // Productos (con variantes, imagen y cálculo de precio)
 // ============================================================
 async function loadProducts() {
@@ -275,57 +389,147 @@ function computeTotal(base, tax) { return Math.round((base || 0) * (1 + (tax || 
 
 function openProductModal(row) {
   const cats = state.categories || [];
+  let modalImages = row ? (row.images && row.images.length ? [...row.images] : (row.image_url ? [row.image_url] : [])) : [];
+  let previewActiveIdx = 0;
+
   openModal(`
     <h3>${row ? 'Editar' : 'Nuevo'} producto</h3>
-    <form id="product-form">
-      <div class="form-grid">
-        <div class="field full"><label>Nombre</label><input name="name" required value="${row ? esc(row.name) : ''}"></div>
-        <div class="field"><label>Sección</label><select name="category_id"><option value="">Sin sección</option>${cats.map(c => `<option value="${c.id}" ${row && row.category_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
-        <div class="field"><label>Unidad de medida</label>
-          <select name="unit">
-            ${['Unidad','Caja','Docena','Kit','Set'].map(u => `<option ${row && row.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
-          </select>
+    <div class="product-modal-grid">
+      <form id="product-form">
+        <div class="form-grid">
+          <div class="field full"><label>Nombre</label><input name="name" required value="${row ? esc(row.name) : ''}"></div>
+          <div class="field"><label>Sección</label><select name="category_id"><option value="">Sin sección</option>${cats.map(c => `<option value="${c.id}" ${row && row.category_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Unidad de medida</label>
+            <select name="unit">
+              ${['Unidad','Caja','Docena','Kit','Set'].map(u => `<option ${row && row.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label>Cantidad inicial / stock</label><input type="number" name="stock" value="${row ? row.stock : 0}"></div>
+          <div class="field"><label>Costo por unidad</label><input type="number" step="0.01" name="cost_price" value="${row ? row.cost_price : 0}"></div>
+          <div class="field"><label>Precio base</label><input type="number" step="0.01" name="base_price" value="${row ? row.base_price : 0}"></div>
+          <div class="field"><label>Impuesto %</label><input type="number" step="0.01" name="tax_percent" value="${row ? row.tax_percent : 0}"></div>
+          <div class="field"><label>Precio total al público</label><input type="text" id="price_preview" disabled value="${formatPrice(row ? row.price : 0)}"></div>
+          <div class="field full"><label>Descripción</label><textarea name="description" rows="3">${row ? esc(row.description || '') : ''}</textarea></div>
+          <div class="field full">
+            <label>Fotos del producto</label>
+            <div class="image-manager" id="image-manager"></div>
+            <p class="image-hint">La primera foto (con borde morado) es la portada que se ve en el catálogo. Pasa el mouse sobre una foto para quitarla o hacerla portada.</p>
+            <input type="file" id="image-file-input" accept="image/*" multiple class="hidden">
+          </div>
+          <div class="field"><label><input type="checkbox" name="featured" ${row && row.featured ? 'checked' : ''}> Destacado</label></div>
+          <div class="field"><label><input type="checkbox" name="active" ${!row || row.active ? 'checked' : ''}> Activo (visible en la tienda)</label></div>
         </div>
-        <div class="field"><label>Cantidad inicial / stock</label><input type="number" name="stock" value="${row ? row.stock : 0}"></div>
-        <div class="field"><label>Costo por unidad</label><input type="number" step="0.01" name="cost_price" value="${row ? row.cost_price : 0}"></div>
-        <div class="field"><label>Precio base</label><input type="number" step="0.01" name="base_price" id="base_price" value="${row ? row.base_price : 0}"></div>
-        <div class="field"><label>Impuesto %</label><input type="number" step="0.01" name="tax_percent" id="tax_percent" value="${row ? row.tax_percent : 0}"></div>
-        <div class="field"><label>Precio total al público</label><input type="text" id="price_preview" disabled value="${formatPrice(row ? row.price : 0)}"></div>
-        <div class="field full"><label>Descripción</label><textarea name="description" rows="3">${row ? esc(row.description || '') : ''}</textarea></div>
-        <div class="field full"><label>Imagen (URL o sube un archivo)</label>
-          <input type="text" name="image_url" id="image_url" placeholder="https://..." value="${row ? esc(row.image_url || '') : ''}">
-          <input type="file" id="image_file" accept="image/*" style="margin-top:8px">
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
         </div>
-        <div class="field"><label><input type="checkbox" name="featured" ${row && row.featured ? 'checked' : ''}> Destacado</label></div>
-        <div class="field"><label><input type="checkbox" name="active" ${!row || row.active ? 'checked' : ''}> Activo (visible en la tienda)</label></div>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Guardar</button>
-      </div>
-    </form>
-  `);
+      </form>
 
-  const updatePreview = () => {
-    const base = Number(qs('#base_price').value) || 0;
-    const tax = Number(qs('#tax_percent').value) || 0;
-    qs('#price_preview').value = formatPrice(computeTotal(base, tax));
-  };
-  qs('#base_price').addEventListener('input', updatePreview);
-  qs('#tax_percent').addEventListener('input', updatePreview);
+      <div class="live-preview">
+        <div class="preview-label">Vista previa — así se verá en la tienda</div>
+        <div class="tilt-stage" id="tilt-stage">
+          <div class="tilt-card" id="tilt-card">
+            <span id="preview-placeholder" style="font-size:3rem">💄</span>
+            <img id="preview-main-img" class="hidden" alt="">
+          </div>
+        </div>
+        <div class="preview-thumbs" id="preview-thumbs"></div>
+        <span class="product-cat" id="preview-cat">Kori Cosmetics</span>
+        <div class="preview-name" id="preview-name">Nombre del producto</div>
+        <div class="preview-price" id="preview-price">$0</div>
+        <p class="preview-desc" id="preview-desc"></p>
+        <button class="btn btn-primary btn-block" disabled>Agregar al carrito 🛍️</button>
+      </div>
+    </div>
+  `, { wide: true });
+
+  const form = qs('#product-form');
+
+  function renderImageManager() {
+    const wrap = qs('#image-manager');
+    wrap.innerHTML = modalImages.map((url, i) => `
+      <div class="image-thumb ${i === 0 ? 'is-cover' : ''}">
+        <img src="${url}">
+        <div class="thumb-actions">
+          ${i !== 0 ? `<button type="button" data-make-cover="${i}" title="Hacer portada">★</button>` : ''}
+          <button type="button" data-remove-image="${i}" title="Quitar">✕</button>
+        </div>
+      </div>
+    `).join('') + `<button type="button" class="image-add-btn" id="btn-add-image" title="Agregar fotos">+</button>`;
+
+    qsa('[data-remove-image]', wrap).forEach(b => b.addEventListener('click', () => {
+      modalImages.splice(Number(b.dataset.removeImage), 1);
+      renderImageManager();
+      updatePreview();
+    }));
+    qsa('[data-make-cover]', wrap).forEach(b => b.addEventListener('click', () => {
+      const [img] = modalImages.splice(Number(b.dataset.makeCover), 1);
+      modalImages.unshift(img);
+      renderImageManager();
+      updatePreview();
+    }));
+    qs('#btn-add-image').addEventListener('click', () => qs('#image-file-input').click());
+  }
+
+  function updatePreview() {
+    const cat = cats.find(c => c.id === form.category_id.value);
+    qs('#preview-name').textContent = form.name.value || 'Nombre del producto';
+    qs('#preview-desc').textContent = form.description.value || '';
+    qs('#preview-cat').textContent = cat ? cat.name : 'Kori Cosmetics';
+    const total = computeTotal(Number(form.base_price.value) || 0, Number(form.tax_percent.value) || 0);
+    qs('#preview-price').textContent = formatPrice(total);
+    qs('#price_preview').value = formatPrice(total);
+
+    if (previewActiveIdx >= modalImages.length) previewActiveIdx = 0;
+    const mainImg = qs('#preview-main-img');
+    const placeholder = qs('#preview-placeholder');
+    if (modalImages.length) {
+      mainImg.src = modalImages[previewActiveIdx];
+      mainImg.classList.remove('hidden');
+      placeholder.classList.add('hidden');
+    } else {
+      mainImg.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+    }
+    qs('#preview-thumbs').innerHTML = modalImages.map((url, i) => `<img src="${url}" class="${i === previewActiveIdx ? 'active' : ''}" data-preview-thumb="${i}">`).join('');
+    qsa('[data-preview-thumb]').forEach(t => t.addEventListener('click', () => {
+      previewActiveIdx = Number(t.dataset.previewThumb);
+      updatePreview();
+    }));
+  }
+
+  // Efecto 3D: la tarjeta de vista previa se inclina según la posición del mouse.
+  const tiltStage = qs('#tilt-stage');
+  const tiltCard = qs('#tilt-card');
+  tiltStage.addEventListener('mousemove', e => {
+    const rect = tiltStage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    tiltCard.style.transform = `rotateY(${x * 18}deg) rotateX(${-y * 18}deg) scale(1.03)`;
+  });
+  tiltStage.addEventListener('mouseleave', () => { tiltCard.style.transform = 'rotateY(0) rotateX(0) scale(1)'; });
+
+  form.addEventListener('input', updatePreview);
   qs('#modal-cancel').addEventListener('click', closeModal);
 
-  qs('#image_file').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const path = `${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from('product-images').upload(path, file);
-    if (error) return alert('Error al subir imagen: ' + error.message);
-    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-    qs('#image_url').value = data.publicUrl;
+  qs('#image-file-input').addEventListener('change', async e => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    for (const file of files) {
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+      const { error } = await supabase.storage.from('product-images').upload(path, file);
+      if (error) { alert('Error al subir imagen: ' + error.message); continue; }
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      modalImages.push(data.publicUrl);
+    }
+    renderImageManager();
+    updatePreview();
   });
 
-  qs('#product-form').addEventListener('submit', async e => {
+  renderImageManager();
+  updatePreview();
+
+  form.addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const base_price = Number(fd.get('base_price')) || 0;
@@ -339,7 +543,8 @@ function openProductModal(row) {
       base_price, tax_percent,
       price: computeTotal(base_price, tax_percent),
       description: fd.get('description') || null,
-      image_url: fd.get('image_url') || null,
+      images: modalImages,
+      image_url: modalImages[0] || null,
       featured: fd.has('featured'),
       active: fd.has('active'),
     };
@@ -405,7 +610,9 @@ async function openVariantsModal(productId) {
 // Importar productos desde CSV
 // ============================================================
 // Columnas esperadas (encabezados exactos, en cualquier orden):
-// name, category, unit, cost_price, base_price, tax_percent, stock, image_url, featured, active, description
+// name, category, unit, cost_price, base_price, tax_percent, stock, image_url, images, featured, active, description
+// - "images" es opcional: varias URLs separadas por "|" (la primera queda de portada).
+//   Si no se envía, se usa "image_url" como única foto.
 // - "category" se busca por nombre y se crea automáticamente si no existe.
 // - "slug" y "price" se calculan solos (price = base_price * (1 + tax_percent/100)).
 // - Si el slug ya existe, el producto se actualiza en vez de duplicarse.
@@ -463,6 +670,9 @@ async function importProductRows(rows) {
       }
       const base_price = Number(row.base_price) || 0;
       const tax_percent = Number(row.tax_percent) || 0;
+      const images = row.images
+        ? String(row.images).split('|').map(u => u.trim()).filter(Boolean)
+        : (row.image_url ? [String(row.image_url).trim()] : []);
       productsToUpsert.push({
         name,
         slug: slugify(name),
@@ -473,7 +683,8 @@ async function importProductRows(rows) {
         tax_percent,
         price: computeTotal(base_price, tax_percent),
         stock: Number(row.stock) || 0,
-        image_url: row.image_url || null,
+        images,
+        image_url: images[0] || null,
         description: row.description || null,
         featured: toBool(row.featured),
         active: row.active === undefined || row.active === '' ? true : toBool(row.active),
