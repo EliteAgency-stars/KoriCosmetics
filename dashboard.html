@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Admin — Kori Cosmetics</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container">
+    <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> Kori Cosmetics</a>
+    <div class="nav-links"><a href="index.html">Ver tienda</a></div>
+    <div class="nav-actions">
+      <span id="admin-email" style="font-size:.85rem;color:var(--text-soft)"></span>
+      <button class="btn btn-ghost btn-sm" id="logout-btn">Salir</button>
+      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
+    </div>
+  </div>
+</nav>
+
+<div id="guard-message" class="loader hidden">Verificando acceso de administrador...</div>
+
+<div id="dash-app" class="dash-layout hidden">
+  <aside class="dash-sidebar">
+    <button data-tab="resumen" class="active">📈 Resumen</button>
+    <button data-tab="productos">💄 Productos</button>
+    <button data-tab="secciones">🗂️ Secciones</button>
+    <button data-tab="clientes">🧑‍🤝‍🧑 Clientes</button>
+    <button data-tab="proveedores">🚚 Proveedores</button>
+    <button data-tab="empleados">👥 Empleados</button>
+    <button data-tab="finanzas">💵 Ventas y gastos</button>
+    <button data-tab="cotizaciones">📋 Cotizaciones</button>
+    <button data-tab="pedidos">🛍️ Pedidos</button>
+    <button data-tab="reportes">📤 Reportes</button>
+    <button data-tab="facturacion">🧮 Facturación electrónica</button>
+  </aside>
+
+  <main class="dash-main">
+
+    <section class="tab-panel" id="tab-resumen">
+      <div class="dash-header"><h2>Resumen</h2></div>
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="panel">
+        <h3>Productos más vistos</h3>
+        <div id="chart-views"><p class="empty-state">Sin datos todavía.</p></div>
+      </div>
+      <div class="panel">
+        <h3>Términos más buscados</h3>
+        <div id="chart-search"><p class="empty-state">Sin datos todavía.</p></div>
+      </div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-productos">
+      <div class="dash-header"><h2>Productos</h2><button class="btn btn-primary btn-sm" id="btn-new-product">+ Nuevo producto</button></div>
+      <div class="panel"><table id="table-productos"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-secciones">
+      <div class="dash-header"><h2>Secciones</h2><button class="btn btn-primary btn-sm" data-generic-new="categories">+ Nueva sección</button></div>
+      <div class="panel"><table id="table-categories"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-clientes">
+      <div class="dash-header"><h2>Clientes</h2><button class="btn btn-primary btn-sm" data-generic-new="clients">+ Nuevo cliente</button></div>
+      <div class="panel"><table id="table-clients"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-proveedores">
+      <div class="dash-header"><h2>Proveedores</h2><button class="btn btn-primary btn-sm" data-generic-new="providers">+ Nuevo proveedor</button></div>
+      <div class="panel"><table id="table-providers"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-empleados">
+      <div class="dash-header"><h2>Empleados</h2><button class="btn btn-primary btn-sm" data-generic-new="employees">+ Nuevo empleado</button></div>
+      <div class="panel"><table id="table-employees"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-finanzas">
+      <div class="dash-header"><h2>Ventas y gastos</h2><button class="btn btn-primary btn-sm" data-generic-new="transactions">+ Registrar movimiento</button></div>
+      <div class="panel"><table id="table-transactions"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-cotizaciones">
+      <div class="dash-header"><h2>Cotizaciones</h2><button class="btn btn-primary btn-sm" data-generic-new="quotes">+ Nueva cotización</button></div>
+      <div class="panel"><table id="table-quotes"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-pedidos">
+      <div class="dash-header"><h2>Pedidos recibidos</h2></div>
+      <div class="panel"><table id="table-orders"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-reportes">
+      <div class="dash-header"><h2>Reportes</h2></div>
+      <div class="panel">
+        <p style="color:var(--text-soft)">Descarga tu información en formato CSV, lista para abrir en Excel.</p>
+        <div class="flex gap-8" style="flex-wrap:wrap">
+          <button class="btn btn-outline" data-report="products">Productos</button>
+          <button class="btn btn-outline" data-report="transactions">Ventas y gastos</button>
+          <button class="btn btn-outline" data-report="orders">Pedidos</button>
+          <button class="btn btn-outline" data-report="clients">Clientes</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-facturacion">
+      <div class="dash-header"><h2>Facturación electrónica</h2></div>
+      <div class="panel">
+        <p>Para emitir factura electrónica válida ante la DIAN necesitas conectar un proveedor tecnológico autorizado (por ejemplo <strong>Factus</strong>, <strong>Alegra</strong> o <strong>Siigo</strong>).</p>
+        <p style="color:var(--text-soft)">Este panel queda listo para guardar tus credenciales cuando elijas un proveedor; por ahora tus comprobantes internos se generan automáticamente en la pestaña "Ventas y gastos".</p>
+        <div class="form-grid" style="margin-top:18px">
+          <div class="field"><label>Proveedor</label><select disabled><option>Próximamente</option></select></div>
+          <div class="field"><label>API Key</label><input disabled placeholder="Se habilita al elegir proveedor"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/app.js"></script>
+<script src="assets/dashboard.js"></script>
+</body>
+</html>

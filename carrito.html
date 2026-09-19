@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tu carrito — Kori Cosmetics</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container">
+    <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> Kori Cosmetics</a>
+    <div class="nav-links"><a href="index.html">Inicio</a><a href="index.html#catalogo">Catálogo</a></div>
+    <div class="nav-actions">
+      <div id="nav-auth-slot"></div>
+      <a href="carrito.html" class="icon-btn active" aria-label="Carrito">🛍️<span class="cart-count" style="display:none">0</span></a>
+      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
+    </div>
+  </div>
+</nav>
+
+<section class="container">
+  <h1 class="section-title" style="text-align:left">Tu carrito</h1>
+  <div class="cart-layout">
+    <div id="cart-items"></div>
+    <div class="summary-card">
+      <h3 class="mt-0">Resumen del pedido</h3>
+      <div class="summary-row"><span>Productos</span><span id="summary-count">0</span></div>
+      <div class="summary-total"><span>Total</span><span id="summary-total">$0</span></div>
+
+      <form id="checkout-form">
+        <div class="field"><label>Nombre completo</label><input type="text" id="c-name" required></div>
+        <div class="field"><label>Teléfono / WhatsApp</label><input type="tel" id="c-phone" required></div>
+        <div class="field"><label>Correo (opcional)</label><input type="email" id="c-email"></div>
+        <div class="field"><label>Dirección de entrega</label><input type="text" id="c-address"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="checkout-btn">Confirmar pedido por WhatsApp 💬</button>
+        <p class="form-msg" id="checkout-msg"></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer><div class="container"><p>© <span id="year"></span> Kori Cosmetics.</p></div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/app.js"></script>
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+// Cambia este número por el WhatsApp real de la tienda (código de país + número, sin +).
+const WHATSAPP_NUMBER = '573000000000';
+
+function renderCart() {
+  const cart = getCart();
+  const wrap = qs('#cart-items');
+  if (!cart.length) {
+    wrap.innerHTML = `<div class="empty-state">Tu carrito está vacío. <a href="index.html#catalogo" style="color:var(--primary-dark);font-weight:600">Ir al catálogo →</a></div>`;
+  } else {
+    wrap.innerHTML = cart.map(item => `
+      <div class="cart-item">
+        ${item.image ? `<img src="${item.image}" alt="${item.name}">` : `<div style="width:70px;height:70px;border-radius:12px;background:var(--bg-soft);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💄</div>`}
+        <div>
+          <strong>${item.name}</strong>
+          ${item.variant ? `<div style="font-size:.82rem;color:var(--text-soft)">${item.variant}</div>` : ''}
+          <div style="font-size:.9rem;color:var(--primary-dark)">${formatPrice(item.price)}</div>
+        </div>
+        <div class="qty-control">
+          <button data-qty-down="${item.id}" data-variant="${item.variant || ''}">−</button>
+          <span>${item.qty}</span>
+          <button data-qty-up="${item.id}" data-variant="${item.variant || ''}">+</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-remove="${item.id}" data-variant="${item.variant || ''}">Quitar</button>
+      </div>
+    `).join('');
+  }
+  qs('#summary-count').textContent = cartCount(cart);
+  qs('#summary-total').textContent = formatPrice(cartTotal(cart));
+  qs('#checkout-btn').disabled = cart.length === 0;
+}
+
+qs('#cart-items').addEventListener('click', e => {
+  const up = e.target.closest('[data-qty-up]');
+  const down = e.target.closest('[data-qty-down]');
+  const rm = e.target.closest('[data-remove]');
+  if (up) {
+    const cart = getCart();
+    const item = cart.find(i => i.id === up.dataset.qtyUp && (i.variant || '') === up.dataset.variant);
+    updateCartQty(item.id, item.variant, item.qty + 1);
+    renderCart();
+  } else if (down) {
+    const cart = getCart();
+    const item = cart.find(i => i.id === down.dataset.qtyDown && (i.variant || '') === down.dataset.variant);
+    if (item.qty <= 1) removeFromCart(item.id, item.variant);
+    else updateCartQty(item.id, item.variant, item.qty - 1);
+    renderCart();
+  } else if (rm) {
+    removeFromCart(rm.dataset.remove, rm.dataset.variant || null);
+    renderCart();
+  }
+});
+
+qs('#checkout-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const cart = getCart();
+  if (!cart.length) return;
+  const msg = qs('#checkout-msg');
+  const btn = qs('#checkout-btn');
+  btn.disabled = true;
+  msg.className = 'form-msg';
+
+  const order = {
+    customer_name: qs('#c-name').value.trim(),
+    phone: qs('#c-phone').value.trim(),
+    email: qs('#c-email').value.trim() || null,
+    address: qs('#c-address').value.trim() || null,
+    items: cart.map(i => ({ id: i.id, name: i.name, variant: i.variant, qty: i.qty, price: i.price })),
+    total: cartTotal(cart),
+  };
+
+  const { error } = await supabase.from('orders').insert(order);
+  btn.disabled = false;
+  if (error) {
+    msg.className = 'form-msg error';
+    msg.textContent = 'No pudimos registrar tu pedido: ' + error.message;
+    return;
+  }
+
+  const lines = cart.map(i => `• ${i.name}${i.variant ? ' (' + i.variant + ')' : ''} x${i.qty} — ${formatPrice(i.price * i.qty)}`).join('\n');
+  const text = encodeURIComponent(`¡Hola Kori Cosmetics! 💜 Quiero confirmar mi pedido:\n\n${lines}\n\nTotal: ${formatPrice(order.total)}\n\nNombre: ${order.customer_name}\nDirección: ${order.address || 'A convenir'}`);
+
+  msg.className = 'form-msg success';
+  msg.textContent = '¡Pedido registrado! Te llevamos a WhatsApp para confirmar.';
+  localStorage.removeItem('kori_cart');
+  updateCartBadge();
+  setTimeout(() => { window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, '_blank'); renderCart(); }, 900);
+});
+
+renderCart();
+</script>
+</body>
+</html>

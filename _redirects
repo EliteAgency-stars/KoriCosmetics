@@ -1,0 +1,4 @@
+# Solo aplica si el archivo no existe ya (Netlify prioriza archivos estáticos reales).
+# Convierte /Blush-Brillante en producto.html?slug=Blush-Brillante sin necesidad
+# de crear un HTML por producto.
+/:slug  /producto.html?slug=:slug  200

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingresar — Kori Cosmetics</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container">
+    <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> Kori Cosmetics</a>
+    <div class="nav-links"></div>
+    <div class="nav-actions">
+      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
+    </div>
+  </div>
+</nav>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="floating-card"><img src="logo.png" alt="Kori Cosmetics"></div>
+    <h1 id="form-title">Bienvenida de nuevo</h1>
+    <p class="sub" id="form-sub">Ingresa para administrar tu tienda Kori Cosmetics.</p>
+
+    <form id="auth-form">
+      <div class="field" style="text-align:left">
+        <label>Correo</label>
+        <input type="email" id="email" required placeholder="tucorreo@ejemplo.com" autocomplete="email">
+      </div>
+      <div class="field" style="text-align:left">
+        <label>Contraseña</label>
+        <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="submit-btn">Ingresar</button>
+      <p class="form-msg" id="form-msg"></p>
+    </form>
+
+    <p style="margin-top:10px;font-size:.88rem;color:var(--text-soft)">
+      ¿No tienes cuenta? <a href="#" id="toggle-mode" style="color:var(--primary-dark);font-weight:600">Crear una</a>
+    </p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/app.js"></script>
+<script>
+let mode = 'signin';
+
+function setMode(m) {
+  mode = m;
+  if (mode === 'signup') {
+    qs('#form-title').textContent = 'Crea tu cuenta';
+    qs('#form-sub').textContent = 'Regístrate para guardar tus datos y seguir tus pedidos.';
+    qs('#submit-btn').textContent = 'Crear cuenta';
+    qs('#toggle-mode').textContent = 'Ya tengo cuenta';
+  } else {
+    qs('#form-title').textContent = 'Bienvenida de nuevo';
+    qs('#form-sub').textContent = 'Ingresa para administrar tu tienda Kori Cosmetics.';
+    qs('#submit-btn').textContent = 'Ingresar';
+    qs('#toggle-mode').textContent = 'Crear una';
+  }
+}
+
+qs('#toggle-mode').addEventListener('click', e => {
+  e.preventDefault();
+  setMode(mode === 'signin' ? 'signup' : 'signin');
+  qs('#form-msg').textContent = '';
+});
+
+qs('#auth-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = qs('#email').value.trim();
+  const password = qs('#password').value;
+  const msg = qs('#form-msg');
+  const btn = qs('#submit-btn');
+  msg.className = 'form-msg';
+  msg.textContent = '';
+  btn.disabled = true;
+
+  try {
+    if (mode === 'signup') {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      msg.className = 'form-msg success';
+      msg.textContent = 'Cuenta creada. Ya puedes ingresar.';
+      setMode('signin');
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      const profile = await getCurrentProfile();
+      location.href = (profile && profile.role === 'admin') ? 'dashboard.html' : 'index.html';
+    }
+  } catch (err) {
+    msg.className = 'form-msg error';
+    msg.textContent = err.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Si ya hay sesión activa, redirige directo
+(async () => {
+  const profile = await getCurrentProfile();
+  if (profile) location.href = profile.role === 'admin' ? 'dashboard.html' : 'index.html';
+})();
+</script>
+</body>
+</html>

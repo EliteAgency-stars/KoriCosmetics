@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Kori Cosmetics</title>
+<script>
+  // Fallback universal: cualquier host estático (GitHub Pages, Netlify, Vercel)
+  // que reciba /Nombre-Del-Producto y no encuentre el archivo, cae aquí.
+  // Si la ruta parece un producto, la reenviamos a producto.html?slug=...
+  const path = location.pathname.replace(/^\/+|\/+$/g, '');
+  const known = ['login.html', 'dashboard.html', 'carrito.html', 'producto.html', 'index.html', ''];
+  if (path && !known.includes(path.toLowerCase())) {
+    location.replace('/producto.html?slug=' + encodeURIComponent(path.split('/').pop()));
+  } else {
+    location.replace('/index.html');
+  }
+</script>
+</head>
+<body>
+  <p>Redirigiendo...</p>
+</body>
+</html>

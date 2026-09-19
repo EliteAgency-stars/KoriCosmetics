@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="page-title">Producto — Kori Cosmetics</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container">
+    <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> Kori Cosmetics</a>
+    <div class="nav-links"><a href="index.html">Inicio</a><a href="index.html#catalogo">Catálogo</a></div>
+    <div class="nav-actions">
+      <div id="nav-auth-slot"></div>
+      <a href="carrito.html" class="icon-btn" aria-label="Carrito">🛍️<span class="cart-count" style="display:none">0</span></a>
+      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
+    </div>
+  </div>
+</nav>
+
+<div id="content" class="container">
+  <div class="loader">Cargando producto...</div>
+</div>
+
+<footer><div class="container"><p>© <span id="year"></span> Kori Cosmetics.</p></div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/app.js"></script>
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+function resolveSlug() {
+  const fromQuery = new URLSearchParams(location.search).get('slug');
+  if (fromQuery) return decodeURIComponent(fromQuery);
+  const path = location.pathname.replace(/^\/+|\/+$/g, '');
+  if (!path || path.toLowerCase() === 'producto.html') return null;
+  return decodeURIComponent(path.split('/').pop());
+}
+
+async function loadProduct() {
+  const slug = resolveSlug();
+  const content = qs('#content');
+  if (!slug) {
+    content.innerHTML = `<div class="empty-state">Producto no especificado. <a href="index.html">Volver al catálogo</a></div>`;
+    return;
+  }
+
+  const { data: product } = await supabase
+    .from('products')
+    .select('*, categories(name, slug)')
+    .ilike('slug', slug)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (!product) {
+    content.innerHTML = `<div class="empty-state">No encontramos este producto 💔 <br><a href="index.html" style="color:var(--primary-dark);font-weight:600">Volver al catálogo</a></div>`;
+    return;
+  }
+
+  document.title = `${product.name} — Kori Cosmetics`;
+  logProductView(product.id);
+
+  const { data: variants } = await supabase.from('product_variants').select('*').eq('product_id', product.id);
+  const groups = {};
+  (variants || []).forEach(v => { (groups[v.name] = groups[v.name] || []).push(v); });
+
+  content.innerHTML = `
+    <div class="breadcrumb"><a href="index.html">Inicio</a> / <a href="index.html#catalogo">Catálogo</a> / ${product.categories ? product.categories.name + ' / ' : ''}${product.name}</div>
+    <div class="product-detail">
+      <div class="detail-gallery">${product.image_url ? `<img src="${product.image_url}" alt="${product.name}">` : `<span style="font-size:4rem">💄</span>`}</div>
+      <div class="detail-info">
+        <span class="product-cat">${product.categories ? product.categories.name : 'Kori Cosmetics'}</span>
+        <h1>${product.name}</h1>
+        <p style="color:var(--text-soft)">${product.description || ''}</p>
+        <div class="detail-price" id="detail-price">${formatPrice(product.price)}</div>
+        <div id="variant-groups"></div>
+        <div class="flex gap-8" style="align-items:center;margin-bottom:20px">
+          <div class="qty-control">
+            <button id="qty-down">−</button><span id="qty-val">1</span><button id="qty-up">+</button>
+          </div>
+          <span style="color:var(--text-soft);font-size:.88rem">${product.stock > 0 ? product.stock + ' disponibles' : 'Sin stock'}</span>
+        </div>
+        <button class="btn btn-primary btn-block" id="add-to-cart" ${product.stock <= 0 ? 'disabled' : ''}>Agregar al carrito 🛍️</button>
+      </div>
+    </div>
+  `;
+
+  let selectedVariant = null;
+  let priceAdjustment = 0;
+  const variantWrap = qs('#variant-groups');
+  Object.entries(groups).forEach(([name, options]) => {
+    const div = document.createElement('div');
+    div.className = 'variant-group';
+    div.innerHTML = `<label>${name}</label><div class="variant-options">${options.map(o => `<span class="variant-chip" data-value="${esc(o.value)}" data-adjust="${o.price_adjustment}">${o.value}</span>`).join('')}</div>`;
+    variantWrap.appendChild(div);
+  });
+  qsa('.variant-chip', variantWrap).forEach(chip => chip.addEventListener('click', () => {
+    qsa('.variant-chip', chip.closest('.variant-group')).forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    selectedVariant = chip.dataset.value;
+    priceAdjustment = Number(chip.dataset.adjust) || 0;
+    qs('#detail-price').textContent = formatPrice(product.price + priceAdjustment);
+  }));
+
+  let qty = 1;
+  qs('#qty-up').addEventListener('click', () => { qty++; qs('#qty-val').textContent = qty; });
+  qs('#qty-down').addEventListener('click', () => { if (qty > 1) qty--; qs('#qty-val').textContent = qty; });
+
+  qs('#add-to-cart').addEventListener('click', () => {
+    addToCart({
+      id: product.id, name: product.name, price: product.price + priceAdjustment,
+      image: product.image_url, variant: selectedVariant, qty,
+    });
+    const btn = qs('#add-to-cart');
+    btn.textContent = 'Agregado ✓';
+    setTimeout(() => btn.textContent = 'Agregar al carrito 🛍️', 1200);
+  });
+}
+
+function esc(v) { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+loadProduct();
+</script>
+</body>
+</html>
