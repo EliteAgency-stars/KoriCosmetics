@@ -7,6 +7,48 @@
 <meta name="description" content="Catálogo virtual de maquillaje Kori Cosmetics. Labiales, blush, bases y más, directo a tu WhatsApp.">
 <link rel="icon" href="logo.png">
 <link rel="stylesheet" href="assets/style.css">
+<style>
+  /* Estilos del hero-galería (autocontenidos, no dependen de assets/style.css) */
+  .hero-gallery {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .hero-gallery-item {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+    background: linear-gradient(135deg, #f3e8ff, #fde2ec);
+  }
+  .hero-gallery-item:nth-child(1) { transform: translateY(-10px); }
+  .hero-gallery-item:nth-child(4) { transform: translateY(10px); }
+  .hero-gallery-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .hero-gallery-item .placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+  }
+  .hero-gallery-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 24px;
+    color: inherit;
+    opacity: 0.7;
+  }
+</style>
 </head>
 <body>
 
@@ -16,7 +58,6 @@
     <div class="nav-links">
       <a href="index.html" class="active">Inicio</a>
       <a href="#catalogo">Catálogo</a>
-      <a href="#features">Por qué elegirnos</a>
     </div>
     <div class="nav-actions">
       <div id="nav-auth-slot"></div>
@@ -32,21 +73,17 @@
     <p>Descubre nuestro catálogo virtual: labiales, blush, bases y más. Arma tu pedido y lo confirmamos contigo directo por WhatsApp.</p>
     <div class="hero-actions">
       <a href="#catalogo" class="btn btn-primary">Ver catálogo ✨</a>
-      <a href="#features" class="btn btn-outline">Por qué elegirnos</a>
     </div>
   </div>
   <div class="hero-visual">
-    <div class="floating-card"><img src="logo.png" alt="Kori Cosmetics"></div>
+    <div class="hero-gallery" id="hero-gallery">
+      <div class="hero-gallery-item"><div class="placeholder">💄</div></div>
+      <div class="hero-gallery-item"><div class="placeholder">💋</div></div>
+      <div class="hero-gallery-item"><div class="placeholder">✨</div></div>
+      <div class="hero-gallery-item"><div class="placeholder">💜</div></div>
+    </div>
   </div>
 </header>
-
-<section id="features">
-  <div class="container">
-    <h2 class="section-title">Todo Kori Cosmetics, en un solo lugar</h2>
-    <p class="section-sub">Un negocio de maquillaje manejado con orden, de principio a fin.</p>
-    <div class="features-grid" id="features-grid"></div>
-  </div>
-</section>
 
 <section id="catalogo">
   <div class="container">
@@ -77,29 +114,6 @@
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
 
-const FEATURES = [
-  ['🖥️', 'Uso desde el computador', 'Administra tu tienda desde cualquier equipo, sin instalar nada.'],
-  ['💵', 'Registro de ventas y gastos', 'Lleva el control de todo lo que entra y sale de tu negocio.'],
-  ['🧾', 'Comprobantes de ventas y gastos', 'Cada movimiento genera su propio número de comprobante.'],
-  ['📦', 'Registro de inventario', 'Controla existencias y costos de cada producto en tiempo real.'],
-  ['🛍️', 'Catálogo virtual', 'Tu vitrina online, siempre disponible para tus clientes.'],
-  ['📋', 'Cotizaciones ilimitadas', 'Genera todas las cotizaciones que necesites, sin límites.'],
-  ['🧑‍🤝‍🧑', 'Creación de clientes', 'Guarda los datos de tus clientes para fidelizarlos.'],
-  ['🚚', 'Creación de proveedores', 'Organiza a tus proveedores y sus datos de contacto.'],
-  ['👥', 'Añadir empleados ilimitados', 'Suma a todo tu equipo sin restricciones.'],
-  ['📊', 'Descargar reportes', 'Exporta tu información en CSV cuando la necesites.'],
-  ['📈', 'Acceso a estadísticas', 'Descubre qué productos buscan y ven más tus clientes.'],
-  ['🎨', 'Variantes en productos', 'Colores, tonos y presentaciones para cada producto.'],
-  ['🧮', 'Facturación electrónica', 'Preparado para integrarse con tu proveedor autorizado DIAN.'],
-];
-
-document.getElementById('features-grid').innerHTML = FEATURES.map(([icon, title, desc]) => `
-  <div class="feature-card">
-    <div class="feature-check">${icon}</div>
-    <div><strong>${title}</strong><p>${desc}</p></div>
-  </div>
-`).join('');
-
 let allProducts = [];
 let activeCategory = 'all';
 
@@ -128,6 +142,23 @@ async function loadProducts() {
     .order('created_at', { ascending: false });
   allProducts = data || [];
   renderProducts();
+  renderHeroGallery();
+}
+
+function renderHeroGallery() {
+  const gallery = document.getElementById('hero-gallery');
+  const withImages = allProducts.filter(p => p.image_url).slice(0, 4);
+
+  if (!withImages.length) {
+    // Deja los emojis de respaldo si aún no hay fotos cargadas en el catálogo
+    return;
+  }
+
+  gallery.innerHTML = withImages.map(p => `
+    <div class="hero-gallery-item">
+      <img src="${p.image_url}" alt="${p.name}" loading="lazy">
+    </div>
+  `).join('');
 }
 
 function renderProducts() {
