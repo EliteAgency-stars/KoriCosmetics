@@ -82,6 +82,15 @@
   </div>
 </footer>
 
+<nav class="mobile-nav">
+  <div class="mobile-nav-inner">
+    <a href="index.html" class="mobile-nav-item active"><span class="icon">🏠</span><span>Inicio</span></a>
+    <a href="index.html#catalogo" class="mobile-nav-item"><span class="icon">🗂️</span><span>Catálogo</span></a>
+    <a href="index.html?search=1#catalogo" class="mobile-nav-item" id="mnav-search"><span class="icon">🔍</span><span>Buscar</span></a>
+    <a href="carrito.html" class="mobile-nav-item"><span class="icon">🛍️</span><span class="cart-count" style="display:none">0</span><span>Carrito</span></a>
+  </div>
+</nav>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/app.js"></script>
 <script>
@@ -122,10 +131,19 @@ window.addEventListener('mousemove', e => {
 });
 
 const FEATURES = [
-  ['✨', 'Resalta tu belleza', 'Realza tus mejores rasgos y luce una versión más segura de ti.'],
-  ['💖', 'Cuida tu piel', 'Dale a tu rostro el cuidado que merece para sentirte increíble cada día.'],
-  ['🌸', 'Atiende las necesidades de tu rostro', 'Soluciones pensadas para cuidar, consentir y transformar tu piel.'],
-  ['👑', 'Siéntete más segura de ti', 'Porque verte bien también es sentirte bien contigo misma.'],
+  ['🖥️', 'Uso desde el computador', 'Administra tu tienda desde cualquier equipo, sin instalar nada.'],
+  ['💵', 'Registro de ventas y gastos', 'Lleva el control de todo lo que entra y sale de tu negocio.'],
+  ['🧾', 'Comprobantes de ventas y gastos', 'Cada movimiento genera su propio número de comprobante.'],
+  ['📦', 'Registro de inventario', 'Controla existencias y costos de cada producto en tiempo real.'],
+  ['🛍️', 'Catálogo virtual', 'Tu vitrina online, siempre disponible para tus clientes.'],
+  ['📋', 'Cotizaciones ilimitadas', 'Genera todas las cotizaciones que necesites, sin límites.'],
+  ['🧑‍🤝‍🧑', 'Creación de clientes', 'Guarda los datos de tus clientes para fidelizarlos.'],
+  ['🚚', 'Creación de proveedores', 'Organiza a tus proveedores y sus datos de contacto.'],
+  ['👥', 'Añadir empleados ilimitados', 'Suma a todo tu equipo sin restricciones.'],
+  ['📊', 'Descargar reportes', 'Exporta tu información en CSV cuando la necesites.'],
+  ['📈', 'Acceso a estadísticas', 'Descubre qué productos buscan y ven más tus clientes.'],
+  ['🎨', 'Variantes en productos', 'Colores, tonos y presentaciones para cada producto.'],
+  ['🧮', 'Facturación electrónica', 'Preparado para integrarse con tu proveedor autorizado DIAN.'],
 ];
 
 document.getElementById('features-grid').innerHTML = FEATURES.map(([icon, title, desc]) => `
@@ -217,6 +235,20 @@ document.getElementById('search-input').addEventListener('keydown', e => {
 
 loadCategories();
 loadProducts();
+
+// Botón "Buscar" del menú inferior (móvil): si ya estamos en esta página,
+// solo baja y enfoca el buscador en vez de recargar.
+qs('#mnav-search')?.addEventListener('click', e => {
+  e.preventDefault();
+  qs('#catalogo').scrollIntoView({ behavior: 'smooth' });
+  qs('#search-input').focus();
+});
+if (new URLSearchParams(location.search).get('search')) {
+  window.addEventListener('load', () => {
+    qs('#catalogo').scrollIntoView({ behavior: 'instant' });
+    qs('#search-input').focus();
+  });
+}
 </script>
 </body>
 </html>
