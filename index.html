@@ -68,6 +68,15 @@
       <button class="btn btn-primary" id="search-btn">Buscar</button>
     </div>
 
+    <div class="filter-bar" style="max-width:460px;margin:0 auto 20px">
+      <select id="sort-select">
+        <option value="recent">Más reciente</option>
+        <option value="price-asc">Precio: menor a mayor</option>
+        <option value="price-desc">Precio: mayor a menor</option>
+        <option value="name-asc">Nombre: A-Z</option>
+      </select>
+    </div>
+
     <div class="category-bar" id="category-bar"></div>
 
     <div id="product-grid" class="product-grid">
@@ -131,11 +140,21 @@ window.addEventListener('mousemove', e => {
 });
 
 const FEATURES = [
-  ['✨', 'Resalta tu belleza', 'Realza tus mejores rasgos y luce una versión más segura de ti.'],
-  ['💖', 'Cuida tu piel', 'Dale a tu rostro el cuidado que merece para sentirte increíble cada día.'],
-  ['🌸', 'Atiende las necesidades de tu rostro', 'Soluciones pensadas para cuidar, consentir y transformar tu piel.'],
-  ['👑', 'Siéntete más segura de ti', 'Porque verte bien también es sentirte bien contigo misma.'],
+  ['🖥️', 'Uso desde el computador', 'Administra tu tienda desde cualquier equipo, sin instalar nada.'],
+  ['💵', 'Registro de ventas y gastos', 'Lleva el control de todo lo que entra y sale de tu negocio.'],
+  ['🧾', 'Comprobantes de ventas y gastos', 'Cada movimiento genera su propio número de comprobante.'],
+  ['📦', 'Registro de inventario', 'Controla existencias y costos de cada producto en tiempo real.'],
+  ['🛍️', 'Catálogo virtual', 'Tu vitrina online, siempre disponible para tus clientes.'],
+  ['📋', 'Cotizaciones ilimitadas', 'Genera todas las cotizaciones que necesites, sin límites.'],
+  ['🧑‍🤝‍🧑', 'Creación de clientes', 'Guarda los datos de tus clientes para fidelizarlos.'],
+  ['🚚', 'Creación de proveedores', 'Organiza a tus proveedores y sus datos de contacto.'],
+  ['👥', 'Añadir empleados ilimitados', 'Suma a todo tu equipo sin restricciones.'],
+  ['📊', 'Descargar reportes', 'Exporta tu información en CSV cuando la necesites.'],
+  ['📈', 'Acceso a estadísticas', 'Descubre qué productos buscan y ven más tus clientes.'],
+  ['🎨', 'Variantes en productos', 'Colores, tonos y presentaciones para cada producto.'],
+  ['🧮', 'Facturación electrónica', 'Preparado para integrarse con tu proveedor autorizado DIAN.'],
 ];
+
 document.getElementById('features-grid').innerHTML = FEATURES.map(([icon, title, desc]) => `
   <div class="feature-card">
     <div class="feature-check">${icon}</div>
@@ -176,9 +195,15 @@ async function loadProducts() {
 function renderProducts() {
   const grid = document.getElementById('product-grid');
   const term = (document.getElementById('search-input').value || '').toLowerCase();
-  let list = allProducts;
+  const sort = document.getElementById('sort-select').value;
+  let list = allProducts.slice();
   if (activeCategory !== 'all') list = list.filter(p => p.categories && p.categories.slug === activeCategory);
   if (term) list = list.filter(p => p.name.toLowerCase().includes(term));
+
+  if (sort === 'price-asc') list.sort((a, b) => a.price - b.price);
+  else if (sort === 'price-desc') list.sort((a, b) => b.price - a.price);
+  else if (sort === 'name-asc') list.sort((a, b) => a.name.localeCompare(b.name));
+  else list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   if (!list.length) {
     grid.innerHTML = `<div class="empty-state">No encontramos productos por ahora 💜</div>`;
@@ -186,10 +211,10 @@ function renderProducts() {
   }
 
   grid.innerHTML = list.map(p => `
-    <div class="product-card">
+    <div class="product-card ${p.is_combo ? 'is-combo' : ''}">
       <a href="/${p.slug}">
         <div class="product-thumb">
-          ${p.featured ? '<span class="badge-featured">Destacado</span>' : ''}
+          ${p.is_combo ? '<span class="badge-combo">🎁 Combo</span>' : (p.featured ? '<span class="badge-featured">Destacado</span>' : '')}
           ${p.image_url ? `<img src="${p.image_url}" alt="${p.name}">` : `<span class="placeholder">💄</span>`}
         </div>
       </a>
@@ -222,6 +247,7 @@ document.getElementById('search-btn').addEventListener('click', () => {
 document.getElementById('search-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') { renderProducts(); logSearch(e.target.value); }
 });
+document.getElementById('sort-select').addEventListener('change', renderProducts);
 
 loadCategories();
 loadProducts();
