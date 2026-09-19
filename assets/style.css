@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Rubik+Bubbles&display=swap');
 
 :root {
   --bg: #faf7fe;
@@ -531,6 +531,62 @@ tr:last-child td { border-bottom: none; }
 .gap-8 { gap: 8px; }
 .hidden { display: none !important; }
 .loader { text-align: center; padding: 40px; color: var(--text-soft); }
+
+/* ---------- Promo banner (Y2K bubble text) ---------- */
+.promo-banner { padding: 8px 0 6px; }
+.promo-inner {
+  position: relative;
+  text-align: center;
+  background: linear-gradient(135deg, var(--bg-soft), var(--bg-elevated));
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 38px 24px 32px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.y2k-text {
+  font-family: 'Rubik Bubbles', 'Baloo 2', cursive;
+  font-size: clamp(2.1rem, 6vw, 4.2rem);
+  line-height: 1.05;
+  margin: 0;
+  display: inline-block;
+  transform: rotate(-2deg);
+  background: linear-gradient(180deg, #ffffff 0%, #e9d3ff 30%, var(--primary) 55%, #ffffff 78%, var(--accent) 100%);
+  background-size: 100% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 2px var(--primary-dark);
+  text-shadow: 0 5px 0 var(--primary-dark), 0 10px 24px rgba(155, 107, 214, .55);
+  animation: y2k-shimmer 5s ease-in-out infinite;
+}
+@keyframes y2k-shimmer {
+  0%, 100% { background-position: 0 0; }
+  50% { background-position: 0 100%; }
+}
+.promo-sub {
+  color: var(--text-soft);
+  font-size: 1.05rem;
+  margin: 12px 0 20px;
+  font-weight: 500;
+}
+.promo-inner .btn { position: relative; z-index: 1; }
+
+/* ---------- Y2K edge decorations ---------- */
+.y2k-icon {
+  position: fixed;
+  z-index: 1;
+  color: var(--primary);
+  opacity: .5;
+  filter: drop-shadow(0 0 6px var(--primary)) drop-shadow(0 0 14px var(--accent));
+  pointer-events: none;
+  transition: transform .12s ease-out;
+  will-change: transform;
+}
+:root[data-theme="dark"] .y2k-icon { opacity: .65; }
+@media (max-width: 860px) {
+  .y2k-icon { display: none; }
+}
 
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; text-align: center; }
