@@ -455,30 +455,83 @@ qs('#btn-new-transaction').addEventListener('click', openTransactionModal);
 async function loadProducts() {
   const { data } = await supabase.from('products').select('*, categories(name)').order('created_at', { ascending: false });
   state.products = data || [];
+  renderProductsTable();
+}
+
+function renderProductsTable() {
   const table = qs('#table-productos');
+  const term = (qs('#product-filter-search')?.value || '').trim().toLowerCase();
+  const sort = qs('#product-filter-sort')?.value || 'recent';
+
+  let list = state.products.slice();
+  if (term) list = list.filter(p => p.name.toLowerCase().includes(term));
+  if (sort === 'price-asc') list.sort((a, b) => a.price - b.price);
+  else if (sort === 'price-desc') list.sort((a, b) => b.price - a.price);
+  else if (sort === 'name-asc') list.sort((a, b) => a.name.localeCompare(b.name));
+  else list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
   table.querySelector('thead').innerHTML = `<tr><th></th><th>Nombre</th><th>Sección</th><th>Precio</th><th>Stock</th><th>Estado</th><th></th></tr>`;
-  if (!state.products.length) {
-    table.querySelector('tbody').innerHTML = `<tr><td colspan="7" class="empty-state">Aún no has creado productos.</td></tr>`;
+  if (!list.length) {
+    table.querySelector('tbody').innerHTML = `<tr><td colspan="7" class="empty-state">${state.products.length ? 'Ningún producto coincide con el filtro.' : 'Aún no has creado productos.'}</td></tr>`;
     return;
   }
-  table.querySelector('tbody').innerHTML = state.products.map(p => `
+  table.querySelector('tbody').innerHTML = list.map(p => `
     <tr>
       <td>${p.image_url ? `<img src="${p.image_url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover">` : '💄'}</td>
-      <td>${esc(p.name)}</td>
+      <td>${esc(p.name)} ${p.is_combo ? '<span class="tag tag-combo">Combo</span>' : ''}</td>
       <td>${p.categories ? esc(p.categories.name) : '—'}</td>
       <td>${formatPrice(p.price)}</td>
       <td>${p.stock}</td>
       <td>${p.active ? '<span class="tag tag-green">Activo</span>' : '<span class="tag tag-red">Inactivo</span>'} ${p.featured ? '<span class="tag tag-neutral">Destacado</span>' : ''}</td>
       <td class="table-actions">
         <button class="btn btn-ghost btn-sm" data-edit-product="${p.id}">Editar</button>
-        <button class="btn btn-ghost btn-sm" data-variants="${p.id}">Variantes</button>
+        ${p.is_combo ? '' : `<button class="btn btn-ghost btn-sm" data-variants="${p.id}">Variantes</button>`}
         <button class="btn btn-ghost btn-sm" data-del="products:${p.id}">Eliminar</button>
       </td>
     </tr>
   `).join('');
 }
+qs('#product-filter-search').addEventListener('input', renderProductsTable);
+qs('#product-filter-sort').addEventListener('change', renderProductsTable);
 
 function computeTotal(base, tax) { return Math.round((base || 0) * (1 + (tax || 0) / 100)); }
+
+// Manejador de fotos reutilizable (producto normal y combos): agregar,
+// quitar y elegir portada, subiendo directo al bucket de Supabase.
+function createImageManager({ containerId, fileInputId, initial, onChange }) {
+  let images = [...initial];
+  function render() {
+    const wrap = qs('#' + containerId);
+    wrap.innerHTML = images.map((url, i) => `
+      <div class="image-thumb ${i === 0 ? 'is-cover' : ''}">
+        <img src="${url}">
+        <div class="thumb-actions">
+          ${i !== 0 ? `<button type="button" data-mgr-cover="${i}" title="Hacer portada">★</button>` : ''}
+          <button type="button" data-mgr-remove="${i}" title="Quitar">✕</button>
+        </div>
+      </div>
+    `).join('') + `<button type="button" class="image-add-btn" data-mgr-add title="Agregar fotos">+</button>`;
+
+    qsa('[data-mgr-remove]', wrap).forEach(b => b.addEventListener('click', () => { images.splice(Number(b.dataset.mgrRemove), 1); render(); }));
+    qsa('[data-mgr-cover]', wrap).forEach(b => b.addEventListener('click', () => { const [img] = images.splice(Number(b.dataset.mgrCover), 1); images.unshift(img); render(); }));
+    qs('[data-mgr-add]', wrap).addEventListener('click', () => qs('#' + fileInputId).click());
+    onChange(images);
+  }
+  qs('#' + fileInputId).addEventListener('change', async e => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    for (const file of files) {
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+      const { error } = await supabase.storage.from('product-images').upload(path, file);
+      if (error) { alert('Error al subir imagen: ' + error.message); continue; }
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      images.push(data.publicUrl);
+    }
+    render();
+  });
+  render();
+  return { get: () => images };
+}
 
 function openProductModal(row) {
   const cats = state.categories || [];
@@ -538,32 +591,6 @@ function openProductModal(row) {
 
   const form = qs('#product-form');
 
-  function renderImageManager() {
-    const wrap = qs('#image-manager');
-    wrap.innerHTML = modalImages.map((url, i) => `
-      <div class="image-thumb ${i === 0 ? 'is-cover' : ''}">
-        <img src="${url}">
-        <div class="thumb-actions">
-          ${i !== 0 ? `<button type="button" data-make-cover="${i}" title="Hacer portada">★</button>` : ''}
-          <button type="button" data-remove-image="${i}" title="Quitar">✕</button>
-        </div>
-      </div>
-    `).join('') + `<button type="button" class="image-add-btn" id="btn-add-image" title="Agregar fotos">+</button>`;
-
-    qsa('[data-remove-image]', wrap).forEach(b => b.addEventListener('click', () => {
-      modalImages.splice(Number(b.dataset.removeImage), 1);
-      renderImageManager();
-      updatePreview();
-    }));
-    qsa('[data-make-cover]', wrap).forEach(b => b.addEventListener('click', () => {
-      const [img] = modalImages.splice(Number(b.dataset.makeCover), 1);
-      modalImages.unshift(img);
-      renderImageManager();
-      updatePreview();
-    }));
-    qs('#btn-add-image').addEventListener('click', () => qs('#image-file-input').click());
-  }
-
   function updatePreview() {
     const cat = cats.find(c => c.id === form.category_id.value);
     qs('#preview-name').textContent = form.name.value || 'Nombre del producto';
@@ -605,21 +632,11 @@ function openProductModal(row) {
   form.addEventListener('input', updatePreview);
   qs('#modal-cancel').addEventListener('click', closeModal);
 
-  qs('#image-file-input').addEventListener('change', async e => {
-    const files = [...e.target.files];
-    e.target.value = '';
-    for (const file of files) {
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-      const { error } = await supabase.storage.from('product-images').upload(path, file);
-      if (error) { alert('Error al subir imagen: ' + error.message); continue; }
-      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-      modalImages.push(data.publicUrl);
-    }
-    renderImageManager();
-    updatePreview();
+  createImageManager({
+    containerId: 'image-manager', fileInputId: 'image-file-input', initial: modalImages,
+    onChange: (imgs) => { modalImages = imgs; updatePreview(); },
   });
 
-  renderImageManager();
   updatePreview();
 
   form.addEventListener('submit', async e => {
@@ -649,6 +666,300 @@ function openProductModal(row) {
     const { error } = await query;
     submitBtn.disabled = false;
     if (error) { alert('Error: ' + error.message); return; }
+    closeModal();
+    loadProducts();
+  });
+}
+
+// ============================================================
+// Combos: varios productos empaquetados en uno solo, con desglose
+// de costo/ganancia por cada producto incluido.
+// ============================================================
+async function openComboModal(row) {
+  const cats = state.categories || [];
+  const catalog = (state.products || []).filter(p => !p.is_combo); // un combo no incluye otro combo
+  let modalImages = row ? (row.images && row.images.length ? [...row.images] : (row.image_url ? [row.image_url] : [])) : [];
+  let comboItems = []; // { item_product_id, name, qty, cost_price, price, image_url }
+
+  if (row) {
+    const { data } = await supabase.from('combo_items').select('*, products(name, image_url, cost_price, price)').eq('combo_id', row.id);
+    comboItems = (data || []).map(ci => ({
+      item_product_id: ci.item_product_id,
+      name: ci.products ? ci.products.name : 'Producto eliminado',
+      qty: ci.quantity,
+      cost_price: ci.products ? Number(ci.products.cost_price) : 0,
+      price: ci.products ? Number(ci.products.price) : 0,
+      image_url: ci.image_url || (ci.products ? ci.products.image_url : null),
+    }));
+  }
+
+  openModal(`
+    <h3>${row ? 'Editar' : 'Nuevo'} combo</h3>
+    <div class="product-modal-grid">
+      <form id="combo-form">
+        <div class="form-grid">
+          <div class="field full"><label>Nombre del combo</label><input name="name" required value="${row ? esc(row.name) : ''}"></div>
+          <div class="field"><label>Sección</label><select name="category_id"><option value="">Sin sección</option>${cats.map(c => `<option value="${c.id}" ${row && row.category_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Combos armados (stock)</label><input type="number" name="stock" value="${row ? row.stock : 0}"></div>
+          <div class="field"><label>Costo total (automático)</label><input type="text" id="combo-cost-display" disabled></div>
+          <div class="field"><label>Precio de venta del combo</label><input type="number" step="0.01" name="base_price" value="${row ? row.base_price : 0}"></div>
+          <div class="field"><label>Impuesto %</label><input type="number" step="0.01" name="tax_percent" value="${row ? row.tax_percent : 0}"></div>
+          <div class="field"><label>Precio total al público</label><input type="text" id="price_preview" disabled value="${formatPrice(row ? row.price : 0)}"></div>
+          <div class="field full"><label>Descripción</label><textarea name="description" rows="2">${row ? esc(row.description || '') : ''}</textarea></div>
+          <div class="field full">
+            <label>Fotos de portada del combo</label>
+            <div class="image-manager" id="image-manager"></div>
+            <p class="image-hint">Esta es la foto que se ve en el catálogo. Las fotos de cada producto incluido se eligen abajo.</p>
+            <input type="file" id="image-file-input" accept="image/*" multiple class="hidden">
+          </div>
+          <div class="field"><label><input type="checkbox" name="featured" ${row && row.featured ? 'checked' : ''}> Destacado</label></div>
+          <div class="field"><label><input type="checkbox" name="active" ${!row || row.active ? 'checked' : ''}> Activo (visible en la tienda)</label></div>
+        </div>
+
+        <h4 style="margin:22px 0 4px">Productos incluidos</h4>
+        <p style="color:var(--text-soft);font-size:.85rem;margin:0 0 14px">Elige la foto que quieras mostrar para cada producto dentro del combo: puedes usar la foto que ya tiene o subir una propia.</p>
+
+        <div class="combo-picker-grid">
+          <div>
+            <div class="field"><label>Buscar producto</label><input type="text" id="combo-item-search" placeholder="Escribe el nombre..."></div>
+            <div class="field"><label>Producto</label><select id="combo-item-select" size="5"></select></div>
+            <div class="form-grid">
+              <div class="field"><label>Cantidad</label><input type="number" id="combo-item-qty" min="1" value="1"></div>
+              <div class="field" style="display:flex;align-items:flex-end">
+                <button type="button" class="btn btn-outline btn-block" id="btn-add-combo-item">+ Agregar al combo</button>
+              </div>
+            </div>
+          </div>
+          <div class="sale-mini-preview">
+            <div class="preview-label" style="text-align:left">Vista previa</div>
+            <div class="tilt-stage" id="combo-item-tilt-stage">
+              <div class="tilt-card" id="combo-item-tilt-card">
+                <span id="combo-item-placeholder" style="font-size:2.2rem">💄</span>
+                <img id="combo-item-preview-img" class="hidden" alt="">
+              </div>
+            </div>
+            <div class="preview-name" id="combo-item-preview-name">Elige un producto</div>
+            <div class="preview-price" id="combo-item-preview-price"></div>
+          </div>
+        </div>
+
+        <div class="combo-items-list" id="combo-items-list"></div>
+
+        <table class="combo-cost-table" id="combo-cost-table"></table>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar combo</button>
+        </div>
+      </form>
+
+      <div class="live-preview">
+        <div class="preview-label">Vista previa — así se verá en la tienda</div>
+        <div class="tilt-stage" id="tilt-stage">
+          <div class="tilt-card" id="tilt-card">
+            <span id="preview-placeholder" style="font-size:3rem">🎁</span>
+            <img id="preview-main-img" class="hidden" alt="">
+          </div>
+        </div>
+        <div class="preview-thumbs" id="preview-thumbs"></div>
+        <span class="badge-combo" style="position:static;display:inline-block;margin-bottom:6px">COMBO</span>
+        <span class="product-cat" id="preview-cat">Kori Cosmetics</span>
+        <div class="preview-name" id="preview-name">Nombre del combo</div>
+        <div class="preview-price" id="preview-price">$0</div>
+        <p class="preview-desc" id="preview-desc"></p>
+        <button class="btn btn-primary btn-block" disabled>Agregar al carrito 🛍️</button>
+      </div>
+    </div>
+  `, { wide: true });
+
+  const form = qs('#combo-form');
+  let previewActiveIdx = 0;
+
+  function totalCost() { return comboItems.reduce((s, i) => s + i.cost_price * i.qty, 0); }
+
+  function renderCostTable() {
+    const cost = totalCost();
+    qs('#combo-cost-display').value = formatPrice(cost);
+    const sellPrice = computeTotal(Number(form.base_price.value) || 0, Number(form.tax_percent.value) || 0);
+    const totalProfit = sellPrice - cost;
+    const table = qs('#combo-cost-table');
+    if (!comboItems.length) { table.innerHTML = ''; return; }
+    table.innerHTML = `
+      <thead><tr><th>Producto</th><th>Cant.</th><th>Costo total</th><th>Ganancia asignada</th></tr></thead>
+      <tbody>
+        ${comboItems.map(i => {
+          const itemCost = i.cost_price * i.qty;
+          const share = cost > 0 ? itemCost / cost : 1 / comboItems.length;
+          const itemProfit = totalProfit * share;
+          return `<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td>${formatPrice(itemCost)}</td><td>${formatPrice(itemProfit)}</td></tr>`;
+        }).join('')}
+        <tr class="combo-totals-row"><td>Total</td><td></td><td>${formatPrice(cost)}</td><td>${formatPrice(totalProfit)}</td></tr>
+      </tbody>
+    `;
+  }
+
+  function renderComboItems() {
+    const wrap = qs('#combo-items-list');
+    wrap.innerHTML = comboItems.length
+      ? comboItems.map((item, i) => `
+        <div class="combo-item-row">
+          ${item.image_url ? `<img src="${item.image_url}">` : `<div class="placeholder-thumb">💄</div>`}
+          <span>${esc(item.name)}</span>
+          <input type="number" min="1" value="${item.qty}" data-combo-qty="${i}">
+          <button type="button" class="btn btn-ghost btn-sm" data-combo-change-img="${i}">Cambiar foto</button>
+          <input type="file" accept="image/*" class="hidden" data-combo-file="${i}">
+          <button type="button" class="btn btn-ghost btn-sm" data-combo-remove="${i}">✕</button>
+        </div>
+      `).join('')
+      : `<p class="empty-state">Todavía no agregas productos a este combo.</p>`;
+
+    qsa('[data-combo-qty]', wrap).forEach(input => input.addEventListener('input', () => {
+      comboItems[Number(input.dataset.comboQty)].qty = Math.max(1, Number(input.value) || 1);
+      renderCostTable();
+      updatePreview();
+    }));
+    qsa('[data-combo-remove]', wrap).forEach(btn => btn.addEventListener('click', () => {
+      comboItems.splice(Number(btn.dataset.comboRemove), 1);
+      renderComboItems();
+      renderCostTable();
+      updatePreview();
+    }));
+    qsa('[data-combo-change-img]', wrap).forEach(btn => btn.addEventListener('click', () => {
+      qs(`[data-combo-file="${btn.dataset.comboChangeImg}"]`, wrap).click();
+    }));
+    qsa('[data-combo-file]', wrap).forEach(input => input.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+      const { error } = await supabase.storage.from('product-images').upload(path, file);
+      if (error) return alert('Error al subir imagen: ' + error.message);
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      comboItems[Number(input.dataset.comboFile)].image_url = data.publicUrl;
+      renderComboItems();
+    }));
+  }
+
+  function renderItemOptions(filter = '') {
+    const term = filter.trim().toLowerCase();
+    const list = term ? catalog.filter(p => p.name.toLowerCase().includes(term)) : catalog;
+    qs('#combo-item-select').innerHTML = list.map(p => `<option value="${p.id}">${esc(p.name)} · ${formatPrice(p.price)}</option>`).join('') || `<option disabled>Sin resultados</option>`;
+    updateItemPreview();
+  }
+
+  function selectedCatalogItem() {
+    return catalog.find(p => p.id === qs('#combo-item-select').value) || null;
+  }
+
+  function updateItemPreview() {
+    const p = selectedCatalogItem();
+    const img = qs('#combo-item-preview-img');
+    const placeholder = qs('#combo-item-placeholder');
+    if (p && p.image_url) { img.src = p.image_url; img.classList.remove('hidden'); placeholder.classList.add('hidden'); }
+    else { img.classList.add('hidden'); placeholder.classList.remove('hidden'); }
+    qs('#combo-item-preview-name').textContent = p ? p.name : 'Elige un producto';
+    qs('#combo-item-preview-price').textContent = p ? formatPrice(p.price) : '';
+  }
+
+  const itemTiltStage = qs('#combo-item-tilt-stage');
+  const itemTiltCard = qs('#combo-item-tilt-card');
+  itemTiltStage.addEventListener('mousemove', e => {
+    const rect = itemTiltStage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    itemTiltCard.style.transform = `rotateY(${x * 18}deg) rotateX(${-y * 18}deg) scale(1.04)`;
+  });
+  itemTiltStage.addEventListener('mouseleave', () => { itemTiltCard.style.transform = 'rotateY(0) rotateX(0) scale(1)'; });
+
+  qs('#combo-item-search').addEventListener('input', e => renderItemOptions(e.target.value));
+  qs('#combo-item-select').addEventListener('change', updateItemPreview);
+  qs('#btn-add-combo-item').addEventListener('click', () => {
+    const p = selectedCatalogItem();
+    if (!p) return;
+    const qty = Math.max(1, Number(qs('#combo-item-qty').value) || 1);
+    const existing = comboItems.find(i => i.item_product_id === p.id);
+    if (existing) existing.qty += qty;
+    else comboItems.push({ item_product_id: p.id, name: p.name, qty, cost_price: Number(p.cost_price) || 0, price: Number(p.price) || 0, image_url: p.image_url });
+    renderComboItems();
+    renderCostTable();
+    updatePreview();
+  });
+
+  function updatePreview() {
+    const cat = cats.find(c => c.id === form.category_id.value);
+    qs('#preview-name').textContent = form.name.value || 'Nombre del combo';
+    qs('#preview-desc').textContent = form.description.value || '';
+    qs('#preview-cat').textContent = cat ? cat.name : 'Kori Cosmetics';
+    const total = computeTotal(Number(form.base_price.value) || 0, Number(form.tax_percent.value) || 0);
+    qs('#preview-price').textContent = formatPrice(total);
+    qs('#price_preview').value = formatPrice(total);
+    renderCostTable();
+
+    if (previewActiveIdx >= modalImages.length) previewActiveIdx = 0;
+    const mainImg = qs('#preview-main-img');
+    const placeholder = qs('#preview-placeholder');
+    if (modalImages.length) { mainImg.src = modalImages[previewActiveIdx]; mainImg.classList.remove('hidden'); placeholder.classList.add('hidden'); }
+    else { mainImg.classList.add('hidden'); placeholder.classList.remove('hidden'); }
+    qs('#preview-thumbs').innerHTML = modalImages.map((url, i) => `<img src="${url}" class="${i === previewActiveIdx ? 'active' : ''}" data-preview-thumb="${i}">`).join('');
+    qsa('[data-preview-thumb]').forEach(t => t.addEventListener('click', () => { previewActiveIdx = Number(t.dataset.previewThumb); updatePreview(); }));
+  }
+
+  const tiltStage = qs('#tilt-stage');
+  const tiltCard = qs('#tilt-card');
+  tiltStage.addEventListener('mousemove', e => {
+    const rect = tiltStage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    tiltCard.style.transform = `rotateY(${x * 18}deg) rotateX(${-y * 18}deg) scale(1.03)`;
+  });
+  tiltStage.addEventListener('mouseleave', () => { tiltCard.style.transform = 'rotateY(0) rotateX(0) scale(1)'; });
+
+  form.addEventListener('input', updatePreview);
+  qs('#modal-cancel').addEventListener('click', closeModal);
+  createImageManager({
+    containerId: 'image-manager', fileInputId: 'image-file-input', initial: modalImages,
+    onChange: (imgs) => { modalImages = imgs; updatePreview(); },
+  });
+
+  renderItemOptions();
+  renderComboItems();
+  updatePreview();
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!comboItems.length) return alert('Agrega al menos un producto al combo.');
+    const fd = new FormData(e.target);
+    const base_price = Number(fd.get('base_price')) || 0;
+    const tax_percent = Number(fd.get('tax_percent')) || 0;
+    const payload = {
+      name: fd.get('name'),
+      category_id: fd.get('category_id') || null,
+      unit: 'Kit',
+      stock: Number(fd.get('stock')) || 0,
+      cost_price: totalCost(),
+      base_price, tax_percent,
+      price: computeTotal(base_price, tax_percent),
+      description: fd.get('description') || null,
+      images: modalImages,
+      image_url: modalImages[0] || null,
+      featured: fd.has('featured'),
+      active: fd.has('active'),
+      is_combo: true,
+    };
+    if (!row) payload.slug = slugify(payload.name);
+
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    const query = row ? supabase.from('products').update(payload).eq('id', row.id).select('id').single() : supabase.from('products').insert(payload).select('id').single();
+    const { data: savedProduct, error } = await query;
+    if (error) { submitBtn.disabled = false; alert('Error: ' + error.message); return; }
+
+    const comboId = row ? row.id : savedProduct.id;
+    if (row) await supabase.from('combo_items').delete().eq('combo_id', comboId);
+    const { error: itemsError } = await supabase.from('combo_items').insert(
+      comboItems.map(i => ({ combo_id: comboId, item_product_id: i.item_product_id, quantity: i.qty, image_url: i.image_url }))
+    );
+    submitBtn.disabled = false;
+    if (itemsError) { alert('El combo se guardó, pero hubo un error con sus productos: ' + itemsError.message); return; }
     closeModal();
     loadProducts();
   });
@@ -818,9 +1129,13 @@ async function importProductRows(rows) {
 }
 
 qs('#btn-new-product').addEventListener('click', () => openProductModal(null));
+qs('#btn-new-combo').addEventListener('click', () => openComboModal(null));
 document.addEventListener('click', e => {
   const editP = e.target.closest('[data-edit-product]');
-  if (editP) openProductModal(state.products.find(p => p.id === editP.dataset.editProduct));
+  if (editP) {
+    const product = state.products.find(p => p.id === editP.dataset.editProduct);
+    if (product.is_combo) openComboModal(product); else openProductModal(product);
+  }
   const varBtn = e.target.closest('[data-variants]');
   if (varBtn) openVariantsModal(varBtn.dataset.variants);
 });
