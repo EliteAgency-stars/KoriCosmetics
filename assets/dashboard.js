@@ -249,108 +249,201 @@ document.addEventListener('click', async e => {
 // ============================================================
 function openTransactionModal() {
   const products = (state.products || []).filter(p => p.active);
+  let saleLines = []; // { product_id, name, price, qty, image_url, stock }
 
   openModal(`
     <h3>Registrar movimiento</h3>
-    <form id="transaction-form">
-      <div class="field"><label>Tipo</label>
-        <select id="tx-type">
-          <option value="venta">Venta</option>
-          <option value="gasto">Gasto</option>
-        </select>
+    <div class="field"><label>Tipo</label>
+      <select id="tx-type">
+        <option value="venta">Venta</option>
+        <option value="gasto">Gasto</option>
+      </select>
+    </div>
+
+    <div id="tx-venta-section">
+      <div class="sale-builder-grid">
+        <div>
+          <div class="field"><label>Buscar producto</label><input type="text" id="tx-product-search" placeholder="Escribe el nombre..."></div>
+          <div class="field">
+            <label>Producto</label>
+            <select id="tx-product" size="6"></select>
+          </div>
+          <div class="form-grid">
+            <div class="field"><label>Cantidad</label><input type="number" id="tx-qty" min="1" value="1"></div>
+            <div class="field" style="display:flex;align-items:flex-end">
+              <button type="button" class="btn btn-outline btn-block" id="btn-add-line">+ Agregar a la venta</button>
+            </div>
+          </div>
+        </div>
+        <div class="sale-mini-preview">
+          <div class="preview-label" style="text-align:left">Vista previa</div>
+          <div class="tilt-stage" id="sale-tilt-stage">
+            <div class="tilt-card" id="sale-tilt-card">
+              <span id="sale-preview-placeholder" style="font-size:2.2rem">💄</span>
+              <img id="sale-preview-img" class="hidden" alt="">
+            </div>
+          </div>
+          <div class="preview-name" id="sale-preview-name">Elige un producto</div>
+          <div class="preview-price" id="sale-preview-price"></div>
+          <p class="form-msg" id="sale-preview-stock"></p>
+        </div>
       </div>
-      <div class="field" id="tx-product-field">
-        <label>Producto</label>
-        <select id="tx-product">
-          <option value="">Venta manual (sin producto del catálogo)</option>
-          ${products.map(p => `<option value="${p.id}" data-price="${p.price}" data-stock="${p.stock}" data-name="${esc(p.name)}">${esc(p.name)} · ${formatPrice(p.price)} · stock ${p.stock}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-grid">
-        <div class="field" id="tx-qty-field"><label>Cantidad</label><input type="number" id="tx-qty" min="1" value="1"></div>
-        <div class="field"><label>Monto</label><input type="number" id="tx-amount" step="0.01" required></div>
-      </div>
-      <div class="field full"><label>Concepto</label><input type="text" id="tx-concept" required></div>
-      <div class="form-grid">
-        <div class="field"><label>Categoría</label><input type="text" id="tx-category"></div>
-        <div class="field"><label>Notas</label><input type="text" id="tx-notes"></div>
-      </div>
-      <p class="form-msg" id="tx-hint"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Guardar</button>
-      </div>
-    </form>
-  `);
+
+      <div class="sale-lines" id="sale-lines"><p class="empty-state">Todavía no agregas productos a esta venta.</p></div>
+      <div class="summary-total"><span>Total de la venta</span><span id="sale-total">${formatPrice(0)}</span></div>
+    </div>
+
+    <div id="tx-gasto-section" class="hidden">
+      <div class="field full"><label>Concepto</label><input type="text" id="tx-concept-manual"></div>
+      <div class="field"><label>Monto</label><input type="number" id="tx-amount-manual" step="0.01"></div>
+    </div>
+
+    <div class="form-grid" style="margin-top:8px">
+      <div class="field"><label>Categoría (opcional)</label><input type="text" id="tx-category"></div>
+      <div class="field"><label>Notas (opcional)</label><input type="text" id="tx-notes"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-save-transaction">Guardar</button>
+    </div>
+  `, { wide: true });
 
   const typeEl = qs('#tx-type');
+  const searchEl = qs('#tx-product-search');
   const productEl = qs('#tx-product');
-  const qtyField = qs('#tx-qty-field');
   const qtyEl = qs('#tx-qty');
-  const amountEl = qs('#tx-amount');
-  const conceptEl = qs('#tx-concept');
-  const hintEl = qs('#tx-hint');
+
+  function renderProductOptions(filter = '') {
+    const term = filter.trim().toLowerCase();
+    const list = term ? products.filter(p => p.name.toLowerCase().includes(term)) : products;
+    productEl.innerHTML = list.map(p => `<option value="${p.id}">${esc(p.name)} · ${formatPrice(p.price)} · stock ${p.stock}</option>`).join('')
+      || `<option disabled>Sin resultados</option>`;
+    updateMiniPreview();
+  }
 
   function selectedProduct() {
-    const opt = productEl.selectedOptions[0];
-    return opt && opt.value ? { id: opt.value, price: Number(opt.dataset.price), stock: Number(opt.dataset.stock), name: opt.dataset.name } : null;
+    const id = productEl.value;
+    return products.find(p => p.id === id) || null;
   }
 
-  function sync() {
-    const isVenta = typeEl.value === 'venta';
-    qs('#tx-product-field').classList.toggle('hidden', !isVenta);
-    const product = isVenta ? selectedProduct() : null;
-
-    qtyField.classList.toggle('hidden', !product);
-    hintEl.className = 'form-msg';
-
-    if (product) {
-      const qty = Number(qtyEl.value) || 1;
-      conceptEl.value = `${product.name} × ${qty}`;
-      conceptEl.readOnly = true;
-      amountEl.value = product.price * qty;
-      amountEl.readOnly = true;
-      hintEl.textContent = `Precio unitario: ${formatPrice(product.price)} · Stock disponible: ${product.stock}`;
-      if (qty > product.stock) { hintEl.classList.add('error'); hintEl.textContent += ' — ¡supera el stock disponible!'; }
+  // Vista previa 3D del producto elegido, para no confundirlo con otro parecido.
+  function updateMiniPreview() {
+    const product = selectedProduct();
+    const img = qs('#sale-preview-img');
+    const placeholder = qs('#sale-preview-placeholder');
+    if (product && product.image_url) {
+      img.src = product.image_url;
+      img.classList.remove('hidden');
+      placeholder.classList.add('hidden');
     } else {
-      conceptEl.readOnly = false;
-      amountEl.readOnly = false;
+      img.classList.add('hidden');
+      placeholder.classList.remove('hidden');
     }
+    qs('#sale-preview-name').textContent = product ? product.name : 'Elige un producto';
+    qs('#sale-preview-price').textContent = product ? formatPrice(product.price) : '';
+    qs('#sale-preview-stock').textContent = product ? `Stock disponible: ${product.stock}` : '';
   }
 
-  typeEl.addEventListener('change', sync);
-  productEl.addEventListener('change', sync);
-  qtyEl.addEventListener('input', sync);
+  const tiltStage = qs('#sale-tilt-stage');
+  const tiltCard = qs('#sale-tilt-card');
+  tiltStage.addEventListener('mousemove', e => {
+    const rect = tiltStage.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    tiltCard.style.transform = `rotateY(${x * 18}deg) rotateX(${-y * 18}deg) scale(1.04)`;
+  });
+  tiltStage.addEventListener('mouseleave', () => { tiltCard.style.transform = 'rotateY(0) rotateX(0) scale(1)'; });
+
+  function renderSaleLines() {
+    const wrap = qs('#sale-lines');
+    if (!saleLines.length) {
+      wrap.innerHTML = `<p class="empty-state">Todavía no agregas productos a esta venta.</p>`;
+    } else {
+      wrap.innerHTML = saleLines.map((line, i) => `
+        <div class="sale-line-row">
+          ${line.image_url ? `<img src="${line.image_url}">` : `<div class="placeholder-thumb">💄</div>`}
+          <span>${esc(line.name)}</span>
+          <input type="number" min="1" value="${line.qty}" data-line-qty="${i}">
+          <span>${formatPrice(line.price * line.qty)}</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-line-remove="${i}">✕</button>
+        </div>
+      `).join('');
+      qsa('[data-line-qty]', wrap).forEach(input => input.addEventListener('input', () => {
+        const i = Number(input.dataset.lineQty);
+        saleLines[i].qty = Math.max(1, Number(input.value) || 1);
+        renderSaleLines();
+      }));
+      qsa('[data-line-remove]', wrap).forEach(btn => btn.addEventListener('click', () => {
+        saleLines.splice(Number(btn.dataset.lineRemove), 1);
+        renderSaleLines();
+      }));
+    }
+    qs('#sale-total').textContent = formatPrice(saleLines.reduce((s, l) => s + l.price * l.qty, 0));
+  }
+
+  qs('#btn-add-line').addEventListener('click', () => {
+    const product = selectedProduct();
+    if (!product) return;
+    const qty = Math.max(1, Number(qtyEl.value) || 1);
+    const existing = saleLines.find(l => l.product_id === product.id);
+    const totalRequested = (existing ? existing.qty : 0) + qty;
+    if (totalRequested > product.stock) {
+      if (!confirm(`Solo hay ${product.stock} unidades de "${product.name}" en stock (ya llevas ${existing ? existing.qty : 0} en esta venta). ¿Agregar de todas formas?`)) return;
+    }
+    if (existing) existing.qty += qty;
+    else saleLines.push({ product_id: product.id, name: product.name, price: product.price, qty, image_url: product.image_url, stock: product.stock });
+    renderSaleLines();
+  });
+
+  searchEl.addEventListener('input', () => renderProductOptions(searchEl.value));
+  productEl.addEventListener('change', updateMiniPreview);
+  renderProductOptions();
+  renderSaleLines();
+
+  function syncType() {
+    const isVenta = typeEl.value === 'venta';
+    qs('#tx-venta-section').classList.toggle('hidden', !isVenta);
+    qs('#tx-gasto-section').classList.toggle('hidden', isVenta);
+  }
+  typeEl.addEventListener('change', syncType);
+  syncType();
+
   qs('#modal-cancel').addEventListener('click', closeModal);
-  sync();
 
-  qs('#transaction-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const product = typeEl.value === 'venta' ? selectedProduct() : null;
-    const qty = product ? (Number(qtyEl.value) || 1) : null;
+  qs('#btn-save-transaction').addEventListener('click', async () => {
+    const btn = qs('#btn-save-transaction');
+    const category = qs('#tx-category').value || null;
+    const notes = qs('#tx-notes').value || null;
 
-    if (product && qty > product.stock) {
-      if (!confirm(`Solo hay ${product.stock} unidades de "${product.name}" en stock. ¿Registrar la venta de todas formas?`)) return;
+    let rows;
+    if (typeEl.value === 'venta') {
+      if (!saleLines.length) return alert('Agrega al menos un producto a la venta.');
+      const sale_id = crypto.randomUUID();
+      rows = saleLines.map(l => ({
+        type: 'venta',
+        concept: `${l.name} × ${l.qty}`,
+        product_id: l.product_id,
+        quantity: l.qty,
+        amount: l.price * l.qty,
+        sale_id,
+        category, notes,
+      }));
+    } else {
+      const concept = qs('#tx-concept-manual').value;
+      const amount = Number(qs('#tx-amount-manual').value) || 0;
+      if (!concept.trim()) return alert('Escribe el concepto del gasto.');
+      rows = [{ type: 'gasto', concept, amount, product_id: null, quantity: null, sale_id: null, category, notes }];
     }
 
-    const payload = {
-      type: typeEl.value,
-      concept: conceptEl.value,
-      product_id: product ? product.id : null,
-      quantity: qty,
-      amount: Number(amountEl.value) || 0,
-      category: qs('#tx-category').value || null,
-      notes: qs('#tx-notes').value || null,
-    };
-
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    const { error } = await supabase.from('transactions').insert(payload);
-    submitBtn.disabled = false;
+    btn.disabled = true;
+    const { error } = await supabase.from('transactions').insert(rows);
+    btn.disabled = false;
     if (error) { alert('Error: ' + error.message); return; }
     closeModal();
     genericLoad('transactions');
     loadProducts(); // el stock puede haber cambiado
+    loadStats();
   });
 }
 
@@ -791,15 +884,35 @@ async function loadStats() {
     supabase.from('clients').select('*', { count: 'exact', head: true }),
   ]);
   const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
-  const { data: sales } = await supabase.from('transactions').select('amount').eq('type', 'venta').gte('created_at', startOfMonth.toISOString());
+
+  const [{ data: sales }, { data: expenses }] = await Promise.all([
+    supabase.from('transactions').select('amount, product_id, quantity').eq('type', 'venta').gte('created_at', startOfMonth.toISOString()),
+    supabase.from('transactions').select('amount').eq('type', 'gasto').gte('created_at', startOfMonth.toISOString()),
+  ]);
+
   const revenue = (sales || []).reduce((s, t) => s + Number(t.amount), 0);
+  // "Ahorro sugerido" = lo que costó reponer lo que se vendió (costo por unidad × cantidad).
+  // Ganancia = lo que queda después de separar ese costo (y, en la neta, los gastos).
+  const cogs = (sales || []).reduce((s, t) => {
+    const product = (state.products || []).find(p => p.id === t.product_id);
+    return s + (product ? Number(product.cost_price || 0) * (t.quantity || 0) : 0);
+  }, 0);
+  const gastos = (expenses || []).reduce((s, t) => s + Number(t.amount), 0);
+  const grossProfit = revenue - cogs;
+  const netProfit = grossProfit - gastos;
 
   qs('#stat-grid').innerHTML = `
     <div class="stat-card"><div class="num">${productCount ?? 0}</div><div class="label">Productos</div></div>
     <div class="stat-card"><div class="num">${pendingOrders ?? 0}</div><div class="label">Pedidos pendientes</div></div>
     <div class="stat-card"><div class="num">${clientCount ?? 0}</div><div class="label">Clientes</div></div>
     <div class="stat-card"><div class="num">${formatPrice(revenue)}</div><div class="label">Ventas este mes</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(cogs)}</div><div class="label">Ahorro sugerido (costo de lo vendido)</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(grossProfit)}</div><div class="label">Ganancia bruta este mes</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(gastos)}</div><div class="label">Gastos este mes</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(netProfit)}</div><div class="label">Ganancia neta este mes</div></div>
   `;
+
+  await loadSalesSummary();
 
   const { data: topViewed } = await supabase.from('top_viewed_products').select('*').limit(8);
   if (topViewed && topViewed.length) {
@@ -816,6 +929,37 @@ async function loadStats() {
       <div class="bar-row"><span class="name">${esc(v.term)}</span><div class="bar-track"><div class="bar-fill" style="width:${(v.veces / max) * 100}%"></div></div><span class="val">${v.veces}</span></div>
     `).join('');
   }
+}
+
+// Junta las filas de "transactions" que pertenecen a una misma venta
+// (comparten sale_id) para mostrar una sola tarjeta por venta, aunque haya
+// incluido varios productos.
+async function loadSalesSummary() {
+  const { data } = await supabase.from('transactions').select('*').eq('type', 'venta').order('created_at', { ascending: false }).limit(60);
+  const rows = data || [];
+  const groups = new Map();
+  rows.forEach(r => {
+    const key = r.sale_id || r.id;
+    if (!groups.has(key)) groups.set(key, { created_at: r.created_at, items: [], total: 0 });
+    const g = groups.get(key);
+    g.items.push(r);
+    g.total += Number(r.amount);
+  });
+  const sales = [...groups.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 15);
+
+  const table = qs('#table-sales-summary');
+  table.querySelector('thead').innerHTML = `<tr><th>Fecha</th><th>Productos</th><th>Total</th></tr>`;
+  if (!sales.length) {
+    table.querySelector('tbody').innerHTML = `<tr><td colspan="3" class="empty-state">Todavía no hay ventas registradas.</td></tr>`;
+    return;
+  }
+  table.querySelector('tbody').innerHTML = sales.map(s => `
+    <tr>
+      <td>${new Date(s.created_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+      <td>${s.items.map(i => esc(i.concept)).join(', ')}</td>
+      <td>${formatPrice(s.total)}</td>
+    </tr>
+  `).join('');
 }
 
 // ============================================================
