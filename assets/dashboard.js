@@ -401,6 +401,107 @@ async function openVariantsModal(productId) {
   }));
 }
 
+// ============================================================
+// Importar productos desde CSV
+// ============================================================
+// Columnas esperadas (encabezados exactos, en cualquier orden):
+// name, category, unit, cost_price, base_price, tax_percent, stock, image_url, featured, active, description
+// - "category" se busca por nombre y se crea automáticamente si no existe.
+// - "slug" y "price" se calculan solos (price = base_price * (1 + tax_percent/100)).
+// - Si el slug ya existe, el producto se actualiza en vez de duplicarse.
+qs('#btn-import-csv').addEventListener('click', () => qs('#csv-file-input').click());
+
+qs('#csv-file-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: async results => {
+      await importProductRows(results.data);
+    },
+    error: err => alert('No se pudo leer el CSV: ' + err.message),
+  });
+});
+
+function toBool(v) {
+  if (typeof v === 'boolean') return v;
+  return ['true', '1', 'si', 'sí', 'yes'].includes(String(v || '').trim().toLowerCase());
+}
+
+async function importProductRows(rows) {
+  const errors = [];
+  const validRows = rows.filter(r => r.name && String(r.name).trim());
+  if (!validRows.length) return alert('El CSV no tiene filas válidas (falta la columna "name").');
+
+  // Mapa de categorías existentes, para no duplicar secciones.
+  const { data: existingCats } = await supabase.from('categories').select('id, name');
+  const catMap = new Map((existingCats || []).map(c => [c.name.trim().toLowerCase(), c.id]));
+
+  const productsToUpsert = [];
+  for (const row of validRows) {
+    try {
+      const name = String(row.name).trim();
+      const catName = row.category ? String(row.category).trim() : null;
+      let category_id = null;
+      if (catName) {
+        const key = catName.toLowerCase();
+        if (catMap.has(key)) {
+          category_id = catMap.get(key);
+        } else {
+          const { data: newCat, error: catErr } = await supabase
+            .from('categories')
+            .insert({ name: catName, slug: slugify(catName) })
+            .select('id')
+            .single();
+          if (catErr) throw catErr;
+          category_id = newCat.id;
+          catMap.set(key, category_id);
+        }
+      }
+      const base_price = Number(row.base_price) || 0;
+      const tax_percent = Number(row.tax_percent) || 0;
+      productsToUpsert.push({
+        name,
+        slug: slugify(name),
+        category_id,
+        unit: row.unit || 'Unidad',
+        cost_price: Number(row.cost_price) || 0,
+        base_price,
+        tax_percent,
+        price: computeTotal(base_price, tax_percent),
+        stock: Number(row.stock) || 0,
+        image_url: row.image_url || null,
+        description: row.description || null,
+        featured: toBool(row.featured),
+        active: row.active === undefined || row.active === '' ? true : toBool(row.active),
+      });
+    } catch (err) {
+      errors.push(`${row.name || '(sin nombre)'}: ${err.message}`);
+    }
+  }
+
+  if (!productsToUpsert.length) {
+    return alert('Ninguna fila se pudo procesar.\n' + errors.join('\n'));
+  }
+
+  const { data: upserted, error } = await supabase
+    .from('products')
+    .upsert(productsToUpsert, { onConflict: 'slug' })
+    .select('id');
+
+  if (error) {
+    return alert('Error al importar: ' + error.message);
+  }
+
+  let msg = `Importación lista: ${upserted.length} producto(s) creado(s)/actualizado(s).`;
+  if (errors.length) msg += `\n\n${errors.length} fila(s) con error:\n` + errors.join('\n');
+  alert(msg);
+  loadProducts();
+}
+
 qs('#btn-new-product').addEventListener('click', () => openProductModal(null));
 document.addEventListener('click', e => {
   const editP = e.target.closest('[data-edit-product]');
