@@ -463,10 +463,14 @@ function renderInventoryTotals() {
   const el = qs('#inventory-totals');
   if (!el) return;
   const totalCost = state.products.reduce((s, p) => s + (Number(p.cost_price) || 0) * (Number(p.stock) || 0), 0);
-  const totalProfit = state.products.reduce((s, p) => s + ((Number(p.price) || 0) - (Number(p.cost_price) || 0)) * (Number(p.stock) || 0), 0);
+  // "Ganancia potencial si se vende todo" = lo que recibirías vendiendo todo el
+  // stock al Precio total al público (precio × stock), no la resta del costo.
+  const totalSaleValue = state.products.reduce((s, p) => s + (Number(p.price) || 0) * (Number(p.stock) || 0), 0);
+  const netProfit = totalSaleValue - totalCost;
   el.innerHTML = `
     <div class="stat-card"><div class="num">${formatPrice(totalCost)}</div><div class="label">Costo total del inventario</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(totalProfit)}</div><div class="label">Ganancia potencial de todo el inventario</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(totalSaleValue)}</div><div class="label">Ganancia potencial si se vende todo (al precio al público)</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(netProfit)}</div><div class="label">Ganancia neta después de costos</div></div>
   `;
 }
 
@@ -490,8 +494,10 @@ function renderProductsTable() {
   table.querySelector('tbody').innerHTML = list.map(p => {
     const cost = Number(p.cost_price) || 0;
     const stock = Number(p.stock) || 0;
+    const price = Number(p.price) || 0;
     const itemTotalCost = cost * stock;
-    const itemTotalProfit = ((Number(p.price) || 0) - cost) * stock;
+    const itemSaleValue = price * stock;
+    const itemNetProfit = itemSaleValue - itemTotalCost;
     return `
     <tr class="product-row" data-row-toggle="${p.id}">
       <td><span class="row-chevron">▸</span>${p.image_url ? `<img src="${p.image_url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;vertical-align:middle">` : '💄'}</td>
@@ -512,7 +518,8 @@ function renderProductsTable() {
           <div><strong>${formatPrice(cost)}</strong><span>Costo por unidad</span></div>
           <div><strong>${stock}</strong><span>Unidades en stock</span></div>
           <div><strong>${formatPrice(itemTotalCost)}</strong><span>Costo total en inventario</span></div>
-          <div><strong>${formatPrice(itemTotalProfit)}</strong><span>Ganancia potencial si se vende todo</span></div>
+          <div><strong>${formatPrice(itemSaleValue)}</strong><span>Ganancia potencial si se vende todo (al precio al público)</span></div>
+          <div><strong>${formatPrice(itemNetProfit)}</strong><span>Ganancia neta después de costos</span></div>
         </div>
       </td>
     </tr>
