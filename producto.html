@@ -1,11 +1,25 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-CO">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">Producto — Kori Cosmetics</title>
+<meta name="description" id="meta-description" content="Compra maquillaje en Kori Cosmetics, con envíos a Corozal, Sincelejo y toda Colombia.">
+<meta name="keywords" content="maquillaje Corozal, maquillaje Sucre, maquillaje Sincelejo, maquillaje tiktok Colombia, maquillaje viral, tienda de maquillaje, maquillaje online">
+<meta name="geo.region" content="CO-SUC">
+<meta name="geo.placename" content="Corozal, Sincelejo, Sucre">
+<link rel="canonical" id="canonical-link" href="https://www.koricosmetics.fun/">
 <link rel="icon" href="logo.png">
 <link rel="stylesheet" href="assets/style.css">
+
+<meta property="og:type" content="product">
+<meta property="og:site_name" content="Kori Cosmetics">
+<meta property="og:title" id="og-title" content="Kori Cosmetics">
+<meta property="og:description" id="og-description" content="Compra maquillaje en Kori Cosmetics.">
+<meta property="og:image" id="og-image" content="https://www.koricosmetics.fun/logo.png">
+<meta property="og:url" id="og-url" content="https://www.koricosmetics.fun/">
+<meta property="og:locale" content="es_CO">
+<meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
 
@@ -83,6 +97,39 @@ async function loadProduct() {
   }
 
   const images = (product.images && product.images.length) ? product.images : (product.image_url ? [product.image_url] : []);
+
+  // SEO: título, descripción y tarjeta de enlace propios de este producto,
+  // más datos estructurados (precio y disponibilidad) para que Google pueda
+  // mostrarlos directo en el resultado de búsqueda.
+  const pageUrl = `https://www.koricosmetics.fun/${product.slug}`;
+  const baseDesc = product.description || `Compra ${product.name} en Kori Cosmetics.`;
+  const localSuffix = ' Envíos a Corozal, Sincelejo y Sucre.';
+  const shortDesc = (baseDesc.length + localSuffix.length <= 160 ? baseDesc + localSuffix : baseDesc).slice(0, 160);
+  qs('#meta-description').setAttribute('content', shortDesc);
+  qs('#canonical-link').setAttribute('href', pageUrl);
+  qs('#og-title').setAttribute('content', `${product.name} — Kori Cosmetics`);
+  qs('#og-description').setAttribute('content', shortDesc);
+  qs('#og-image').setAttribute('content', images[0] || 'https://www.koricosmetics.fun/logo.png');
+  qs('#og-url').setAttribute('content', pageUrl);
+
+  const ld = document.createElement('script');
+  ld.type = 'application/ld+json';
+  ld.textContent = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: product.description || '',
+    image: images,
+    sku: product.id,
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'COP',
+      price: product.price,
+      availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+      url: pageUrl,
+    },
+  });
+  document.head.appendChild(ld);
 
   content.innerHTML = `
     <div class="breadcrumb"><a href="index.html">Inicio</a> / <a href="index.html#catalogo">Catálogo</a> / ${product.categories ? product.categories.name + ' / ' : ''}${product.name}</div>
