@@ -455,7 +455,19 @@ qs('#btn-new-transaction').addEventListener('click', openTransactionModal);
 async function loadProducts() {
   const { data } = await supabase.from('products').select('*, categories(name)').order('created_at', { ascending: false });
   state.products = data || [];
+  renderInventoryTotals();
   renderProductsTable();
+}
+
+function renderInventoryTotals() {
+  const el = qs('#inventory-totals');
+  if (!el) return;
+  const totalCost = state.products.reduce((s, p) => s + (Number(p.cost_price) || 0) * (Number(p.stock) || 0), 0);
+  const totalProfit = state.products.reduce((s, p) => s + ((Number(p.price) || 0) - (Number(p.cost_price) || 0)) * (Number(p.stock) || 0), 0);
+  el.innerHTML = `
+    <div class="stat-card"><div class="num">${formatPrice(totalCost)}</div><div class="label">Costo total del inventario</div></div>
+    <div class="stat-card"><div class="num">${formatPrice(totalProfit)}</div><div class="label">Ganancia potencial de todo el inventario</div></div>
+  `;
 }
 
 function renderProductsTable() {
@@ -475,9 +487,14 @@ function renderProductsTable() {
     table.querySelector('tbody').innerHTML = `<tr><td colspan="7" class="empty-state">${state.products.length ? 'Ningún producto coincide con el filtro.' : 'Aún no has creado productos.'}</td></tr>`;
     return;
   }
-  table.querySelector('tbody').innerHTML = list.map(p => `
-    <tr>
-      <td>${p.image_url ? `<img src="${p.image_url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover">` : '💄'}</td>
+  table.querySelector('tbody').innerHTML = list.map(p => {
+    const cost = Number(p.cost_price) || 0;
+    const stock = Number(p.stock) || 0;
+    const itemTotalCost = cost * stock;
+    const itemTotalProfit = ((Number(p.price) || 0) - cost) * stock;
+    return `
+    <tr class="product-row" data-row-toggle="${p.id}">
+      <td><span class="row-chevron">▸</span>${p.image_url ? `<img src="${p.image_url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;vertical-align:middle">` : '💄'}</td>
       <td>${esc(p.name)} ${p.is_combo ? '<span class="tag tag-combo">Combo</span>' : ''}</td>
       <td>${p.categories ? esc(p.categories.name) : '—'}</td>
       <td>${formatPrice(p.price)}</td>
@@ -489,8 +506,26 @@ function renderProductsTable() {
         <button class="btn btn-ghost btn-sm" data-del="products:${p.id}">Eliminar</button>
       </td>
     </tr>
-  `).join('');
+    <tr class="product-detail-row hidden" data-detail-for="${p.id}">
+      <td colspan="7">
+        <div class="inventory-breakdown">
+          <div><strong>${formatPrice(cost)}</strong><span>Costo por unidad</span></div>
+          <div><strong>${stock}</strong><span>Unidades en stock</span></div>
+          <div><strong>${formatPrice(itemTotalCost)}</strong><span>Costo total en inventario</span></div>
+          <div><strong>${formatPrice(itemTotalProfit)}</strong><span>Ganancia potencial si se vende todo</span></div>
+        </div>
+      </td>
+    </tr>
+  `;
+  }).join('');
 }
+qs('#table-productos').addEventListener('click', e => {
+  if (e.target.closest('.table-actions')) return;
+  const row = e.target.closest('[data-row-toggle]');
+  if (!row) return;
+  row.classList.toggle('expanded');
+  qs(`[data-detail-for="${row.dataset.rowToggle}"]`).classList.toggle('hidden');
+});
 qs('#product-filter-search').addEventListener('input', renderProductsTable);
 qs('#product-filter-sort').addEventListener('change', renderProductsTable);
 
