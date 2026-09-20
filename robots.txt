@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard.html
+Disallow: /login.html
+Disallow: /carrito.html
+
+Sitemap: https://www.koricosmetics.fun/sitemap.xml
