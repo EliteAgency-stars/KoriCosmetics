@@ -227,14 +227,20 @@ async function loadCategories() {
   });
 }
 
+let ratingsMap = {};
+
 async function loadProducts() {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*, categories(name, slug)')
-    .eq('active', true)
-    .order('featured', { ascending: false })
-    .order('created_at', { ascending: false });
+  const [{ data, error }, { data: ratings }] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*, categories(name, slug)')
+      .eq('active', true)
+      .order('featured', { ascending: false })
+      .order('created_at', { ascending: false }),
+    supabase.from('product_ratings').select('*'),
+  ]);
   allProducts = data || [];
+  ratingsMap = Object.fromEntries((ratings || []).map(r => [r.product_id, r]));
   renderProducts();
 }
 
@@ -267,6 +273,7 @@ function renderProducts() {
       <div class="product-body">
         <span class="product-cat">${p.categories ? p.categories.name : 'Kori'}</span>
         <a href="/${p.slug}"><span class="product-name">${p.name}</span></a>
+        ${ratingsMap[p.id] ? `<span class="rating-summary"><span class="stars">${renderStars(ratingsMap[p.id].avg_rating)}</span> (${ratingsMap[p.id].review_count})</span>` : ''}
         <span class="product-price">${formatPrice(p.price)}</span>
       </div>
       <div class="product-actions">
