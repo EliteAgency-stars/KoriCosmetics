@@ -85,6 +85,8 @@ async function loadProduct() {
 
   document.title = `${product.name} — Kori Cosmetics`;
   logProductView(product.id);
+  const profile = await getCurrentProfile();
+  const isAdmin = !!(profile && profile.role === 'admin');
 
   const { data: variants } = await supabase.from('product_variants').select('*').eq('product_id', product.id);
   const groups = {};
@@ -144,6 +146,7 @@ async function loadProduct() {
         ${product.is_combo ? '<span class="badge-combo" style="position:static;display:inline-block;margin-bottom:8px">🎁 Combo</span>' : ''}
         <span class="product-cat">${product.categories ? product.categories.name : 'Kori Cosmetics'}</span>
         <h1>${product.name}</h1>
+        <div class="rating-summary" id="rating-summary"></div>
         <p style="color:var(--text-soft)">${product.description || ''}</p>
         <div class="detail-price" id="detail-price">${formatPrice(product.price)}</div>
         <div id="variant-groups"></div>
@@ -169,6 +172,36 @@ async function loadProduct() {
         <button class="btn btn-primary btn-block" id="add-to-cart" ${product.stock <= 0 ? 'disabled' : ''}>Agregar al carrito 🛍️</button>
       </div>
     </div>
+
+    <section class="reviews-section" id="reviews-section">
+      <h2 class="section-title" style="text-align:left">Reseñas</h2>
+      <div id="reviews-list"><p class="empty-state">Cargando reseñas...</p></div>
+      <div class="review-form">
+        <h3 style="margin-top:0">Escribe tu reseña</h3>
+        <form id="review-form">
+          <div class="field"><label>Tu nombre</label><input type="text" id="review-name" required maxlength="80"></div>
+          <div class="field">
+            <label>Calificación</label>
+            <div class="star-picker" id="star-picker">
+              <span data-star="1">★</span><span data-star="2">★</span><span data-star="3">★</span><span data-star="4">★</span><span data-star="5">★</span>
+            </div>
+          </div>
+          <div class="field"><label>Comentario (opcional)</label><textarea id="review-comment" rows="3" maxlength="1000"></textarea></div>
+          <button type="submit" class="btn btn-primary">Publicar reseña</button>
+          <p class="form-msg" id="review-msg"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="recommend-section" id="related-section" style="display:none">
+      <h2>Más productos de esta categoría</h2>
+      <div class="product-grid" id="related-products"></div>
+    </section>
+
+    <section class="recommend-section" id="recommended-section" style="display:none">
+      <h2>Recomendado para ti</h2>
+      <div class="product-grid" id="recommended-products"></div>
+    </section>
   `;
 
   qsa('[data-thumb]').forEach(t => t.addEventListener('click', () => {
@@ -233,6 +266,109 @@ async function loadProduct() {
     btn.textContent = 'Agregado ✓';
     setTimeout(() => btn.textContent = 'Agregar al carrito 🛍️', 1200);
   });
+
+  // ---------- Reseñas ----------
+  async function loadReviews() {
+    const { data } = await supabase.from('reviews').select('*').eq('product_id', product.id).order('created_at', { ascending: false });
+    const reviews = data || [];
+    const list = qs('#reviews-list');
+    if (!reviews.length) {
+      list.innerHTML = `<p class="empty-state">Todavía no hay reseñas. ¡Sé la primera persona en opinar! 💜</p>`;
+      qs('#rating-summary').innerHTML = '';
+      return;
+    }
+    const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+    qs('#rating-summary').innerHTML = `<span class="stars">${renderStars(avg)}</span> ${avg.toFixed(1)} · ${reviews.length} reseña${reviews.length === 1 ? '' : 's'}`;
+    list.innerHTML = reviews.map(r => `
+      <div class="review-card">
+        <div class="review-head">
+          <div><span class="review-author">${esc(r.author_name)}</span> <span class="stars">${renderStars(r.rating)}</span></div>
+          <span class="review-date">${new Date(r.created_at).toLocaleDateString('es-CO')}</span>
+        </div>
+        ${r.comment ? `<p>${esc(r.comment)}</p>` : ''}
+        ${isAdmin ? `<button class="btn btn-ghost btn-sm" data-del-review="${r.id}" style="margin-top:8px">Eliminar</button>` : ''}
+      </div>
+    `).join('');
+    if (isAdmin) {
+      qsa('[data-del-review]', list).forEach(btn => btn.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar esta reseña?')) return;
+        await supabase.from('reviews').delete().eq('id', btn.dataset.delReview);
+        loadReviews();
+      }));
+    }
+  }
+
+  let selectedRating = 0;
+  const starSpans = qsa('#star-picker span');
+  starSpans.forEach(span => span.addEventListener('click', () => {
+    selectedRating = Number(span.dataset.star);
+    starSpans.forEach(s => s.classList.toggle('active', Number(s.dataset.star) <= selectedRating));
+  }));
+
+  qs('#review-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = qs('#review-msg');
+    msg.className = 'form-msg';
+    if (!selectedRating) { msg.className = 'form-msg error'; msg.textContent = 'Selecciona una calificación.'; return; }
+    const name = qs('#review-name').value.trim();
+    const comment = qs('#review-comment').value.trim();
+    const { error } = await supabase.from('reviews').insert({ product_id: product.id, author_name: name, rating: selectedRating, comment: comment || null });
+    if (error) { msg.className = 'form-msg error'; msg.textContent = 'No se pudo enviar: ' + error.message; return; }
+    msg.className = 'form-msg success';
+    msg.textContent = '¡Gracias por tu reseña!';
+    qs('#review-form').reset();
+    selectedRating = 0;
+    starSpans.forEach(s => s.classList.remove('active'));
+    loadReviews();
+  });
+
+  loadReviews();
+
+  // ---------- Recomendaciones ----------
+  function productCardHTML(p) {
+    return `
+      <div class="product-card ${p.is_combo ? 'is-combo' : ''}">
+        <a href="/${p.slug}">
+          <div class="product-thumb">
+            ${p.is_combo ? '<span class="badge-combo">🎁 Combo</span>' : ''}
+            ${p.image_url ? `<img src="${p.image_url}" alt="${esc(p.name)}">` : `<span class="placeholder">💄</span>`}
+          </div>
+        </a>
+        <div class="product-body">
+          <a href="/${p.slug}"><span class="product-name">${esc(p.name)}</span></a>
+          <span class="product-price">${formatPrice(p.price)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadRelated() {
+    if (!product.category_id) return;
+    const { data } = await supabase.from('products').select('*').eq('category_id', product.category_id).eq('active', true).neq('id', product.id).limit(8);
+    const related = data || [];
+    if (related.length) {
+      qs('#related-products').innerHTML = related.map(productCardHTML).join('');
+      qs('#related-section').style.display = '';
+    }
+  }
+
+  async function loadRecommended() {
+    const { data } = await supabase.from('top_viewed_products').select('*').neq('id', product.id).limit(8);
+    let recommended = data || [];
+    if (recommended.length < 4) {
+      // Si todavía no hay suficientes vistas registradas, se completa con lo más reciente.
+      const { data: fallback } = await supabase.from('products').select('*').eq('active', true).neq('id', product.id).order('created_at', { ascending: false }).limit(8);
+      const seen = new Set(recommended.map(p => p.id));
+      (fallback || []).forEach(p => { if (!seen.has(p.id) && recommended.length < 8) { recommended.push(p); seen.add(p.id); } });
+    }
+    if (recommended.length) {
+      qs('#recommended-products').innerHTML = recommended.map(productCardHTML).join('');
+      qs('#recommended-section').style.display = '';
+    }
+  }
+
+  loadRelated();
+  loadRecommended();
 }
 
 function esc(v) { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
