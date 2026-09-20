@@ -399,6 +399,17 @@ footer {
 .filter-bar input[type="text"] { flex: 1; min-width: 200px; }
 .filter-bar select { min-width: 200px; }
 
+.product-row { cursor: pointer; }
+.product-row:hover { background: var(--bg-soft); }
+.product-row .row-chevron { display: inline-block; margin-right: 6px; transition: transform .15s; color: var(--text-soft); }
+.product-row.expanded .row-chevron { transform: rotate(90deg); }
+.product-detail-row td { background: var(--bg-soft); padding: 16px 14px; }
+.product-detail-row.hidden { display: none; }
+.inventory-breakdown { display: flex; gap: 28px; flex-wrap: wrap; }
+.inventory-breakdown div strong { display: block; font-family: var(--font-display); font-size: 1.1rem; color: var(--primary-dark); }
+:root[data-theme="dark"] .inventory-breakdown div strong { color: var(--primary); }
+.inventory-breakdown div span { font-size: .78rem; color: var(--text-soft); }
+
 /* ---------- Combos ---------- */
 .combo-picker-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; margin-bottom: 18px; }
 @media (max-width: 700px) { .combo-picker-grid { grid-template-columns: 1fr; } }
