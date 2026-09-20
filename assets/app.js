@@ -38,6 +38,12 @@ function slugify(name) {
 function qs(sel, root = document) { return root.querySelector(sel); }
 function qsa(sel, root = document) { return [...root.querySelectorAll(sel)]; }
 
+// ---------- Estrellas de reseñas ----------
+function renderStars(rating) {
+  const full = Math.round(rating);
+  return '★'.repeat(full) + '☆'.repeat(5 - full);
+}
+
 // ---------- Cart (localStorage) ----------
 const CART_KEY = 'kori_cart';
 function getCart() {
