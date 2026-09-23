@@ -22,14 +22,21 @@ qs('#logout-btn').addEventListener('click', async () => {
 // ============================================================
 // Tabs
 // ============================================================
+function goToTab(tab) {
+  const btn = qs(`.dash-sidebar button[data-tab="${tab}"]`);
+  if (!btn) return;
+  qsa('.dash-sidebar button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  btn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  qsa('.tab-panel').forEach(p => p.classList.add('hidden'));
+  qs('#tab-' + tab).classList.remove('hidden');
+  window.scrollTo({ top: 0 });
+}
 function initTabs() {
-  qsa('.dash-sidebar button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      qsa('.dash-sidebar button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      qsa('.tab-panel').forEach(p => p.classList.add('hidden'));
-      qs('#tab-' + btn.dataset.tab).classList.remove('hidden');
-    });
+  qsa('.dash-sidebar button').forEach(btn => btn.addEventListener('click', () => goToTab(btn.dataset.tab)));
+  document.addEventListener('click', e => {
+    const link = e.target.closest('[data-goto]');
+    if (link) goToTab(link.dataset.goto);
   });
 }
 
@@ -40,12 +47,15 @@ function openModal(html, { wide = false } = {}) {
   const content = qs('#modal-content');
   content.className = 'modal' + (wide ? ' modal-wide' : '');
   content.innerHTML = html;
+  content.scrollTop = 0;
   qs('#modal-overlay').classList.remove('hidden');
+  document.body.classList.add('modal-open');
 }
 function closeModal() {
   qs('#modal-overlay').classList.add('hidden');
   qs('#modal-content').innerHTML = '';
   qs('#modal-content').className = 'modal';
+  document.body.classList.remove('modal-open');
 }
 qs('#modal-overlay').addEventListener('click', e => { if (e.target.id === 'modal-overlay') closeModal(); });
 
@@ -71,7 +81,13 @@ const ENTITIES = {
   },
   clients: {
     label: 'cliente', table: 'clients', tableId: 'table-clients', order: 'created_at',
-    columns: [['name','Nombre'],['document_id','Documento'],['phone','Teléfono'],['email','Correo']],
+    columns: [
+      ['name','Nombre'],
+      ['phone','Teléfono', v => v ? `<a class="wa-link" href="https://wa.me/${waNumber(v)}" target="_blank" rel="noopener">${esc(v)}</a>` : '—'],
+      [row => typeof clientBalance === 'function' ? clientBalance(row.id) : 0, 'Debe', v => v > 0 ? `<span class="tag tag-orange">${formatPrice(v)}</span>` : '<span class="tag tag-green">Al día</span>'],
+      ['document_id','Documento'],
+    ],
+    filterInput: 'client-filter',
     fields: [
       { key:'name', label:'Nombre', type:'text', required:true },
       { key:'document_id', label:'Documento', type:'text' },
@@ -107,36 +123,15 @@ const ENTITIES = {
       { key:'active', label:'Activo', type:'checkbox', value:true },
     ],
   },
-  transactions: {
-    label: 'movimiento', table: 'transactions', tableId: 'table-transactions', order: 'created_at',
-    columns: [
-      ['receipt_number','Comprobante'],
-      ['type','Tipo', v => v === 'venta' ? '<span class="tag tag-green">Venta</span>' : '<span class="tag tag-red">Gasto</span>'],
-      [row => row.product_id ? `${(state.products.find(p => p.id === row.product_id) || {}).name || 'Producto eliminado'} × ${row.quantity}` : row.concept, 'Detalle'],
-      ['amount','Monto', v => formatPrice(v)],
-      ['created_at','Fecha', v => new Date(v).toLocaleDateString('es-CO')],
-    ],
-    noEdit: true, // los movimientos no se editan (afectarían el inventario dos veces); solo se registran y consultan
-  },
-  quotes: {
-    label: 'cotización', table: 'quotes', tableId: 'table-quotes', order: 'created_at',
-    columns: [
-      ['client_name','Cliente'], ['total','Total', v => formatPrice(v)],
-      ['status','Estado', v => `<span class="tag tag-neutral">${esc(v)}</span>`],
-      ['created_at','Fecha', v => new Date(v).toLocaleDateString('es-CO')],
-    ],
-    fields: [
-      { key:'client_name', label:'Cliente', type:'text', required:true },
-      { key:'total', label:'Total', type:'number', required:true },
-      { key:'status', label:'Estado', type:'select', options:[['pendiente','Pendiente'],['aceptada','Aceptada'],['rechazada','Rechazada']] },
-      { key:'items', label:'Detalle (una línea por ítem)', type:'textarea', full:true },
-    ],
-    prepare: d => ({ ...d, items: (d.items || '').split('\n').filter(Boolean).map(description => ({ description })) }),
-    format: row => ({ ...row, items: (row.items || []).map(i => i.description).join('\n') }),
-  },
 };
 
 const state = {};
+
+// Número en formato wa.me (Colombia por defecto si viene sin indicativo).
+function waNumber(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return digits.length === 10 ? '57' + digits : digits;
+}
 
 async function genericLoad(key) {
   const cfg = ENTITIES[key];
@@ -148,17 +143,20 @@ async function genericLoad(key) {
 function genericRender(key) {
   const cfg = ENTITIES[key];
   const table = qs('#' + cfg.tableId);
-  const rows = state[key] || [];
+  let rows = state[key] || [];
+  const term = cfg.filterInput ? (qs('#' + cfg.filterInput)?.value || '').trim().toLowerCase() : '';
+  if (term) rows = rows.filter(r => cfg.columns.some(c => typeof c[0] === 'string' && String(r[c[0]] || '').toLowerCase().includes(term)));
   table.querySelector('thead').innerHTML = `<tr>${cfg.columns.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr>`;
   if (!rows.length) {
-    table.querySelector('tbody').innerHTML = `<tr><td colspan="${cfg.columns.length + 1}" class="empty-state">Todavía no hay ${cfg.label}s registrados.</td></tr>`;
+    table.querySelector('tbody').innerHTML = `<tr><td colspan="${cfg.columns.length + 1}" class="empty-state">${term ? 'Sin resultados.' : `Todavía no hay ${cfg.label}s registrados.`}</td></tr>`;
     return;
   }
   table.querySelector('tbody').innerHTML = rows.map(row => `
     <tr>
-      ${cfg.columns.map(c => {
+      ${cfg.columns.map((c, i) => {
         const raw = typeof c[0] === 'function' ? c[0](row) : row[c[0]];
-        return `<td>${c[2] ? c[2](raw) : esc(raw)}</td>`;
+        const html = c[2] ? c[2](raw) : esc(raw);
+        return `<td data-label="${c[1]}" class="${i === 0 ? 'cell-title' : ''}">${html === '' ? '—' : html}</td>`;
       }).join('')}
       <td class="table-actions">
         ${cfg.noEdit ? '' : `<button class="btn btn-ghost btn-sm" data-edit="${key}:${row.id}">Editar</button>`}
@@ -242,212 +240,6 @@ document.addEventListener('click', async e => {
   }
 });
 
-// ============================================================
-// Ventas y gastos: registrar una venta eligiendo producto + cantidad
-// (el monto y el descuento de inventario se calculan solos, para que
-// todo — stock, comprobante y reporte — coincida siempre).
-// ============================================================
-function openTransactionModal() {
-  const products = (state.products || []).filter(p => p.active);
-  let saleLines = []; // { product_id, name, price, qty, image_url, stock }
-
-  openModal(`
-    <h3>Registrar movimiento</h3>
-    <div class="field"><label>Tipo</label>
-      <select id="tx-type">
-        <option value="venta">Venta</option>
-        <option value="gasto">Gasto</option>
-      </select>
-    </div>
-
-    <div id="tx-venta-section">
-      <div class="sale-builder-grid">
-        <div>
-          <div class="field"><label>Buscar producto</label><input type="text" id="tx-product-search" placeholder="Escribe el nombre..."></div>
-          <div class="field">
-            <label>Producto</label>
-            <select id="tx-product" size="6"></select>
-          </div>
-          <div class="form-grid">
-            <div class="field"><label>Cantidad</label><input type="number" id="tx-qty" min="1" value="1"></div>
-            <div class="field" style="display:flex;align-items:flex-end">
-              <button type="button" class="btn btn-outline btn-block" id="btn-add-line">+ Agregar a la venta</button>
-            </div>
-          </div>
-        </div>
-        <div class="sale-mini-preview">
-          <div class="preview-label" style="text-align:left">Vista previa</div>
-          <div class="tilt-stage" id="sale-tilt-stage">
-            <div class="tilt-card" id="sale-tilt-card">
-              <span id="sale-preview-placeholder" style="font-size:2.2rem">💄</span>
-              <img id="sale-preview-img" class="hidden" alt="">
-            </div>
-          </div>
-          <div class="preview-name" id="sale-preview-name">Elige un producto</div>
-          <div class="preview-price" id="sale-preview-price"></div>
-          <p class="form-msg" id="sale-preview-stock"></p>
-        </div>
-      </div>
-
-      <div class="sale-lines" id="sale-lines"><p class="empty-state">Todavía no agregas productos a esta venta.</p></div>
-      <div class="summary-total"><span>Total de la venta</span><span id="sale-total">${formatPrice(0)}</span></div>
-    </div>
-
-    <div id="tx-gasto-section" class="hidden">
-      <div class="field full"><label>Concepto</label><input type="text" id="tx-concept-manual"></div>
-      <div class="field"><label>Monto</label><input type="number" id="tx-amount-manual" step="0.01"></div>
-    </div>
-
-    <div class="form-grid" style="margin-top:8px">
-      <div class="field"><label>Categoría (opcional)</label><input type="text" id="tx-category"></div>
-      <div class="field"><label>Notas (opcional)</label><input type="text" id="tx-notes"></div>
-    </div>
-
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" id="modal-cancel">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="btn-save-transaction">Guardar</button>
-    </div>
-  `, { wide: true });
-
-  const typeEl = qs('#tx-type');
-  const searchEl = qs('#tx-product-search');
-  const productEl = qs('#tx-product');
-  const qtyEl = qs('#tx-qty');
-
-  function renderProductOptions(filter = '') {
-    const term = filter.trim().toLowerCase();
-    const list = term ? products.filter(p => p.name.toLowerCase().includes(term)) : products;
-    productEl.innerHTML = list.map(p => `<option value="${p.id}">${esc(p.name)} · ${formatPrice(p.price)} · stock ${p.stock}</option>`).join('')
-      || `<option disabled>Sin resultados</option>`;
-    updateMiniPreview();
-  }
-
-  function selectedProduct() {
-    const id = productEl.value;
-    return products.find(p => p.id === id) || null;
-  }
-
-  // Vista previa 3D del producto elegido, para no confundirlo con otro parecido.
-  function updateMiniPreview() {
-    const product = selectedProduct();
-    const img = qs('#sale-preview-img');
-    const placeholder = qs('#sale-preview-placeholder');
-    if (product && product.image_url) {
-      img.src = product.image_url;
-      img.classList.remove('hidden');
-      placeholder.classList.add('hidden');
-    } else {
-      img.classList.add('hidden');
-      placeholder.classList.remove('hidden');
-    }
-    qs('#sale-preview-name').textContent = product ? product.name : 'Elige un producto';
-    qs('#sale-preview-price').textContent = product ? formatPrice(product.price) : '';
-    qs('#sale-preview-stock').textContent = product ? `Stock disponible: ${product.stock}` : '';
-  }
-
-  const tiltStage = qs('#sale-tilt-stage');
-  const tiltCard = qs('#sale-tilt-card');
-  tiltStage.addEventListener('mousemove', e => {
-    const rect = tiltStage.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    tiltCard.style.transform = `rotateY(${x * 18}deg) rotateX(${-y * 18}deg) scale(1.04)`;
-  });
-  tiltStage.addEventListener('mouseleave', () => { tiltCard.style.transform = 'rotateY(0) rotateX(0) scale(1)'; });
-
-  function renderSaleLines() {
-    const wrap = qs('#sale-lines');
-    if (!saleLines.length) {
-      wrap.innerHTML = `<p class="empty-state">Todavía no agregas productos a esta venta.</p>`;
-    } else {
-      wrap.innerHTML = saleLines.map((line, i) => `
-        <div class="sale-line-row">
-          ${line.image_url ? `<img src="${line.image_url}">` : `<div class="placeholder-thumb">💄</div>`}
-          <span>${esc(line.name)}</span>
-          <input type="number" min="1" value="${line.qty}" data-line-qty="${i}">
-          <span>${formatPrice(line.price * line.qty)}</span>
-          <button type="button" class="btn btn-ghost btn-sm" data-line-remove="${i}">✕</button>
-        </div>
-      `).join('');
-      qsa('[data-line-qty]', wrap).forEach(input => input.addEventListener('input', () => {
-        const i = Number(input.dataset.lineQty);
-        saleLines[i].qty = Math.max(1, Number(input.value) || 1);
-        renderSaleLines();
-      }));
-      qsa('[data-line-remove]', wrap).forEach(btn => btn.addEventListener('click', () => {
-        saleLines.splice(Number(btn.dataset.lineRemove), 1);
-        renderSaleLines();
-      }));
-    }
-    qs('#sale-total').textContent = formatPrice(saleLines.reduce((s, l) => s + l.price * l.qty, 0));
-  }
-
-  qs('#btn-add-line').addEventListener('click', () => {
-    const product = selectedProduct();
-    if (!product) return;
-    const qty = Math.max(1, Number(qtyEl.value) || 1);
-    const existing = saleLines.find(l => l.product_id === product.id);
-    const totalRequested = (existing ? existing.qty : 0) + qty;
-    if (totalRequested > product.stock) {
-      if (!confirm(`Solo hay ${product.stock} unidades de "${product.name}" en stock (ya llevas ${existing ? existing.qty : 0} en esta venta). ¿Agregar de todas formas?`)) return;
-    }
-    if (existing) existing.qty += qty;
-    else saleLines.push({ product_id: product.id, name: product.name, price: product.price, qty, image_url: product.image_url, stock: product.stock });
-    renderSaleLines();
-  });
-
-  searchEl.addEventListener('input', () => renderProductOptions(searchEl.value));
-  productEl.addEventListener('change', updateMiniPreview);
-  renderProductOptions();
-  renderSaleLines();
-
-  function syncType() {
-    const isVenta = typeEl.value === 'venta';
-    qs('#tx-venta-section').classList.toggle('hidden', !isVenta);
-    qs('#tx-gasto-section').classList.toggle('hidden', isVenta);
-  }
-  typeEl.addEventListener('change', syncType);
-  syncType();
-
-  qs('#modal-cancel').addEventListener('click', closeModal);
-
-  qs('#btn-save-transaction').addEventListener('click', async () => {
-    const btn = qs('#btn-save-transaction');
-    const category = qs('#tx-category').value || null;
-    const notes = qs('#tx-notes').value || null;
-
-    let rows;
-    if (typeEl.value === 'venta') {
-      if (!saleLines.length) return alert('Agrega al menos un producto a la venta.');
-      const sale_id = crypto.randomUUID();
-      rows = saleLines.map(l => ({
-        type: 'venta',
-        concept: `${l.name} × ${l.qty}`,
-        product_id: l.product_id,
-        quantity: l.qty,
-        amount: l.price * l.qty,
-        sale_id,
-        category, notes,
-      }));
-    } else {
-      const concept = qs('#tx-concept-manual').value;
-      const amount = Number(qs('#tx-amount-manual').value) || 0;
-      if (!concept.trim()) return alert('Escribe el concepto del gasto.');
-      rows = [{ type: 'gasto', concept, amount, product_id: null, quantity: null, sale_id: null, category, notes }];
-    }
-
-    btn.disabled = true;
-    const { error } = await supabase.from('transactions').insert(rows);
-    btn.disabled = false;
-    if (error) { alert('Error: ' + error.message); return; }
-    closeModal();
-    genericLoad('transactions');
-    loadProducts(); // el stock puede haber cambiado
-    loadStats();
-  });
-}
-
-qs('#btn-new-transaction').addEventListener('click', openTransactionModal);
 
 // ============================================================
 // Productos (con variantes, imagen y cálculo de precio)
@@ -468,9 +260,9 @@ function renderInventoryTotals() {
   const totalSaleValue = state.products.reduce((s, p) => s + (Number(p.price) || 0) * (Number(p.stock) || 0), 0);
   const netProfit = totalSaleValue - totalCost;
   el.innerHTML = `
-    <div class="stat-card"><div class="num">${formatPrice(totalCost)}</div><div class="label">Costo total del inventario</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(totalSaleValue)}</div><div class="label">Ganancia potencial si se vende todo (al precio al público)</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(netProfit)}</div><div class="label">Ganancia neta después de costos</div></div>
+    <div class="kpi"><span class="kpi-label">Costo del inventario</span><span class="kpi-num">${formatPrice(totalCost)}</span></div>
+    <div class="kpi"><span class="kpi-label">Si vendes todo</span><span class="kpi-num">${formatPrice(totalSaleValue)}</span></div>
+    <div class="kpi kpi-good"><span class="kpi-label">Ganancia neta</span><span class="kpi-num">${formatPrice(netProfit)}</span></div>
   `;
 }
 
@@ -500,12 +292,12 @@ function renderProductsTable() {
     const itemNetProfit = itemSaleValue - itemTotalCost;
     return `
     <tr class="product-row" data-row-toggle="${p.id}">
-      <td><span class="row-chevron">▸</span>${p.image_url ? `<img src="${p.image_url}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;vertical-align:middle">` : '💄'}</td>
-      <td>${esc(p.name)} ${p.is_combo ? '<span class="tag tag-combo">Combo</span>' : ''}</td>
-      <td>${p.categories ? esc(p.categories.name) : '—'}</td>
-      <td>${formatPrice(p.price)}</td>
-      <td>${p.stock}</td>
-      <td>${p.active ? '<span class="tag tag-green">Activo</span>' : '<span class="tag tag-red">Inactivo</span>'} ${p.featured ? '<span class="tag tag-neutral">Destacado</span>' : ''}</td>
+      <td class="cell-thumb"><span class="row-chevron">▸</span>${p.image_url ? `<img src="${p.image_url}" class="row-thumb" loading="lazy">` : '<span class="row-thumb">💄</span>'}</td>
+      <td class="cell-title">${esc(p.name)} ${p.is_combo ? '<span class="tag tag-combo">Combo</span>' : ''}</td>
+      <td data-label="Sección">${p.categories ? esc(p.categories.name) : '—'}</td>
+      <td data-label="Precio">${formatPrice(p.price)}</td>
+      <td data-label="Stock">${p.stock <= 0 ? '<span class="tag tag-red">Agotado</span>' : p.stock}</td>
+      <td data-label="Estado">${p.active ? '<span class="tag tag-green">Activo</span>' : '<span class="tag tag-red">Inactivo</span>'} ${p.featured ? '<span class="tag tag-neutral">Destacado</span>' : ''}</td>
       <td class="table-actions">
         <button class="btn btn-ghost btn-sm" data-edit-product="${p.id}">Editar</button>
         ${p.is_combo ? '' : `<button class="btn btn-ghost btn-sm" data-variants="${p.id}">Variantes</button>`}
@@ -518,8 +310,8 @@ function renderProductsTable() {
           <div><strong>${formatPrice(cost)}</strong><span>Costo por unidad</span></div>
           <div><strong>${stock}</strong><span>Unidades en stock</span></div>
           <div><strong>${formatPrice(itemTotalCost)}</strong><span>Costo total en inventario</span></div>
-          <div><strong>${formatPrice(itemSaleValue)}</strong><span>Ganancia potencial si se vende todo (al precio al público)</span></div>
-          <div><strong>${formatPrice(itemNetProfit)}</strong><span>Ganancia neta después de costos</span></div>
+          <div><strong>${formatPrice(itemSaleValue)}</strong><span>Si vendes todo</span></div>
+          <div><strong>${formatPrice(itemNetProfit)}</strong><span>Ganancia neta</span></div>
         </div>
       </td>
     </tr>
@@ -1182,9 +974,11 @@ document.addEventListener('click', e => {
   if (varBtn) openVariantsModal(varBtn.dataset.variants);
 });
 
+
 // ============================================================
 // Pedidos (orders)
 // ============================================================
+const ORDER_STATUSES = ['pendiente','confirmado','enviado','entregado','cancelado'];
 async function loadOrders() {
   const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
   state.orders = data || [];
@@ -1194,14 +988,13 @@ async function loadOrders() {
     table.querySelector('tbody').innerHTML = `<tr><td colspan="6" class="empty-state">Todavía no llegan pedidos.</td></tr>`;
     return;
   }
-  const statuses = ['pendiente','confirmado','enviado','entregado','cancelado'];
   table.querySelector('tbody').innerHTML = state.orders.map(o => `
     <tr>
-      <td>${esc(o.customer_name)}</td>
-      <td>${esc(o.phone)}</td>
-      <td>${formatPrice(o.total)}</td>
-      <td><select data-status="${o.id}">${statuses.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
-      <td>${new Date(o.created_at).toLocaleDateString('es-CO')}</td>
+      <td class="cell-title">${esc(o.customer_name)}</td>
+      <td data-label="Teléfono">${o.phone ? `<a class="wa-link" href="https://wa.me/${waNumber(o.phone)}" target="_blank" rel="noopener">${esc(o.phone)}</a>` : '—'}</td>
+      <td data-label="Total">${formatPrice(o.total)}</td>
+      <td data-label="Estado"><select data-status="${o.id}">${ORDER_STATUSES.map(s => `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+      <td data-label="Fecha">${new Date(o.created_at).toLocaleDateString('es-CO')}</td>
       <td class="table-actions">
         <button class="btn btn-ghost btn-sm" data-view-order="${o.id}">Ver</button>
         <button class="btn btn-ghost btn-sm" data-del="orders:${o.id}">Eliminar</button>
@@ -1219,58 +1012,26 @@ document.addEventListener('click', e => {
   if (!viewBtn) return;
   const order = state.orders.find(o => o.id === viewBtn.dataset.viewOrder);
   openModal(`
-    <h3>Pedido de ${esc(order.customer_name)}</h3>
-    <p style="color:var(--text-soft)">📱 ${esc(order.phone)} ${order.email ? '· ' + esc(order.email) : ''}</p>
-    <p style="color:var(--text-soft)">${esc(order.address || '')}</p>
-    <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th></tr></thead><tbody>
-      ${(order.items || []).map(i => `<tr><td>${esc(i.name)}${i.variant ? ' — ' + esc(i.variant) : ''}</td><td>${i.qty}</td><td>${formatPrice(i.price)}</td></tr>`).join('')}
-    </tbody></table>
+    <div class="modal-head"><h3>Pedido de ${esc(order.customer_name)}</h3><button class="modal-x" data-close-modal aria-label="Cerrar">✕</button></div>
+    <p class="hint">📱 ${esc(order.phone)} ${order.email ? '· ' + esc(order.email) : ''}</p>
+    ${order.address ? `<p class="hint">📍 ${esc(order.address)}</p>` : ''}
+    <div class="card-list">
+      ${(order.items || []).map(i => `
+        <div class="line-card"><div class="line-main"><strong>${esc(i.name)}</strong>${i.variant ? `<span class="hint">${esc(i.variant)}</span>` : ''}</div>
+        <div class="line-side"><span class="hint">${i.qty} × ${formatPrice(i.price)}</span><strong>${formatPrice(i.qty * i.price)}</strong></div></div>
+      `).join('')}
+    </div>
     <div class="summary-total"><span>Total</span><span>${formatPrice(order.total)}</span></div>
-    <div class="modal-actions"><button class="btn btn-primary" id="modal-cancel">Cerrar</button></div>
+    <div class="modal-actions"><button class="btn btn-primary" data-close-modal>Cerrar</button></div>
   `);
-  qs('#modal-cancel').addEventListener('click', closeModal);
 });
+document.addEventListener('click', e => { if (e.target.closest('[data-close-modal]')) closeModal(); });
 
 // ============================================================
-// Resumen / estadísticas
+// Resumen: gráficas de vistas y búsquedas
+// (los números del mes se calculan en ventas.js → loadStats)
 // ============================================================
-async function loadStats() {
-  const [{ count: productCount }, { count: pendingOrders }, { count: clientCount }] = await Promise.all([
-    supabase.from('products').select('*', { count: 'exact', head: true }),
-    supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'pendiente'),
-    supabase.from('clients').select('*', { count: 'exact', head: true }),
-  ]);
-  const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0,0,0,0);
-
-  const [{ data: sales }, { data: expenses }] = await Promise.all([
-    supabase.from('transactions').select('amount, product_id, quantity').eq('type', 'venta').gte('created_at', startOfMonth.toISOString()),
-    supabase.from('transactions').select('amount').eq('type', 'gasto').gte('created_at', startOfMonth.toISOString()),
-  ]);
-
-  const revenue = (sales || []).reduce((s, t) => s + Number(t.amount), 0);
-  // "Ahorro sugerido" = lo que costó reponer lo que se vendió (costo por unidad × cantidad).
-  // Ganancia = lo que queda después de separar ese costo (y, en la neta, los gastos).
-  const cogs = (sales || []).reduce((s, t) => {
-    const product = (state.products || []).find(p => p.id === t.product_id);
-    return s + (product ? Number(product.cost_price || 0) * (t.quantity || 0) : 0);
-  }, 0);
-  const gastos = (expenses || []).reduce((s, t) => s + Number(t.amount), 0);
-  const grossProfit = revenue - cogs;
-  const netProfit = grossProfit - gastos;
-
-  qs('#stat-grid').innerHTML = `
-    <div class="stat-card"><div class="num">${productCount ?? 0}</div><div class="label">Productos</div></div>
-    <div class="stat-card"><div class="num">${pendingOrders ?? 0}</div><div class="label">Pedidos pendientes</div></div>
-    <div class="stat-card"><div class="num">${clientCount ?? 0}</div><div class="label">Clientes</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(revenue)}</div><div class="label">Ventas este mes</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(cogs)}</div><div class="label">Ahorro sugerido (costo de lo vendido)</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(grossProfit)}</div><div class="label">Ganancia bruta este mes</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(gastos)}</div><div class="label">Gastos este mes</div></div>
-    <div class="stat-card"><div class="num">${formatPrice(netProfit)}</div><div class="label">Ganancia neta este mes</div></div>
-  `;
-
-  await loadSalesSummary();
-
+async function loadCharts() {
   const { data: topViewed } = await supabase.from('top_viewed_products').select('*').limit(8);
   if (topViewed && topViewed.length) {
     const max = Math.max(...topViewed.map(v => v.views));
@@ -1288,58 +1049,29 @@ async function loadStats() {
   }
 }
 
-// Junta las filas de "transactions" que pertenecen a una misma venta
-// (comparten sale_id) para mostrar una sola tarjeta por venta, aunque haya
-// incluido varios productos.
-async function loadSalesSummary() {
-  const { data } = await supabase.from('transactions').select('*').eq('type', 'venta').order('created_at', { ascending: false }).limit(60);
-  const rows = data || [];
-  const groups = new Map();
-  rows.forEach(r => {
-    const key = r.sale_id || r.id;
-    if (!groups.has(key)) groups.set(key, { created_at: r.created_at, items: [], total: 0 });
-    const g = groups.get(key);
-    g.items.push(r);
-    g.total += Number(r.amount);
-  });
-  const sales = [...groups.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 15);
-
-  const table = qs('#table-sales-summary');
-  table.querySelector('thead').innerHTML = `<tr><th>Fecha</th><th>Productos</th><th>Total</th></tr>`;
-  if (!sales.length) {
-    table.querySelector('tbody').innerHTML = `<tr><td colspan="3" class="empty-state">Todavía no hay ventas registradas.</td></tr>`;
-    return;
-  }
-  table.querySelector('tbody').innerHTML = sales.map(s => `
-    <tr>
-      <td>${new Date(s.created_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-      <td>${s.items.map(i => esc(i.concept)).join(', ')}</td>
-      <td>${formatPrice(s.total)}</td>
-    </tr>
-  `).join('');
-}
-
 // ============================================================
 // Reportes (CSV)
 // ============================================================
 function toCSV(rows) {
   if (!rows.length) return '';
-  const headers = Object.keys(rows[0]).filter(k => typeof rows[0][k] !== 'object');
+  const headers = Object.keys(rows[0]).filter(k => typeof rows[0][k] !== 'object' || rows[0][k] === null);
   const escCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   return [headers.join(','), ...rows.map(r => headers.map(h => escCsv(r[h])).join(','))].join('\n');
 }
 function downloadCSV(filename, rows) {
   if (!rows.length) return alert('No hay datos para exportar.');
-  const blob = new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8;' });
+  // El BOM hace que Excel abra bien las tildes y la ñ.
+  const blob = new Blob(['﻿' + toCSV(rows)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+const REPORT_TABLES = ['products', 'transactions', 'quotes', 'debts', 'orders', 'clients'];
 qsa('[data-report]').forEach(btn => btn.addEventListener('click', async () => {
   const key = btn.dataset.report;
-  const table = key === 'products' ? 'products' : key === 'transactions' ? 'transactions' : key === 'orders' ? 'orders' : 'clients';
-  const { data } = await supabase.from(table).select('*');
+  if (!REPORT_TABLES.includes(key)) return;
+  const { data } = await supabase.from(key).select('*');
   downloadCSV(`kori-${key}.csv`, data || []);
 }));
 
@@ -1351,12 +1083,11 @@ async function initDashboard() {
   await genericLoad('categories');
   await Promise.all([
     loadProducts(),
-    genericLoad('clients'),
     genericLoad('providers'),
     genericLoad('employees'),
-    genericLoad('transactions'),
-    genericLoad('quotes'),
     loadOrders(),
-    loadStats(),
+    loadVentasModule(), // ventas.js: clientes, ventas, cotizaciones, deudas y resumen
   ]);
+  loadStats();
+  loadCharts();
 }

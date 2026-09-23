@@ -2,19 +2,19 @@
 <html lang="es-CO">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Panel Admin — Kori Cosmetics</title>
 <link rel="icon" href="logo.png">
 <link rel="stylesheet" href="assets/style.css">
 </head>
-<body>
+<body class="is-dashboard">
 
 <nav class="navbar">
   <div class="container">
-    <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> Kori Cosmetics</a>
+    <a href="index.html" class="brand"><img src="logo.png" alt="Kori Cosmetics"> <span class="brand-text">Kori Cosmetics</span></a>
     <div class="nav-links"><a href="index.html">Ver tienda</a></div>
     <div class="nav-actions">
-      <span id="admin-email" style="font-size:.85rem;color:var(--text-soft)"></span>
+      <span id="admin-email" class="admin-email"></span>
       <button class="btn btn-ghost btn-sm" id="logout-btn">Salir</button>
       <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
     </div>
@@ -25,51 +25,102 @@
 
 <div id="dash-app" class="dash-layout hidden">
   <aside class="dash-sidebar">
-    <button data-tab="resumen" class="active">📈 Resumen</button>
-    <button data-tab="productos">💄 Productos</button>
-    <button data-tab="secciones">🗂️ Secciones</button>
-    <button data-tab="clientes">🧑‍🤝‍🧑 Clientes</button>
-    <button data-tab="proveedores">🚚 Proveedores</button>
-    <button data-tab="empleados">👥 Empleados</button>
-    <button data-tab="finanzas">💵 Ventas y gastos</button>
-    <button data-tab="cotizaciones">📋 Cotizaciones</button>
-    <button data-tab="pedidos">🛍️ Pedidos</button>
-    <button data-tab="reportes">📤 Reportes</button>
-    <button data-tab="facturacion">🧮 Facturación electrónica</button>
+    <button data-tab="resumen" class="active">📈 <span>Resumen</span></button>
+    <button data-tab="finanzas">💵 <span>Ventas</span></button>
+    <button data-tab="cotizaciones">📋 <span>Cotizaciones</span></button>
+    <button data-tab="deudas">🤝 <span>Deudas</span></button>
+    <button data-tab="clientes">🧑‍🤝‍🧑 <span>Clientes</span></button>
+    <button data-tab="productos">💄 <span>Productos</span></button>
+    <button data-tab="pedidos">🛍️ <span>Pedidos</span></button>
+    <button data-tab="secciones">🗂️ <span>Secciones</span></button>
+    <button data-tab="proveedores">🚚 <span>Proveedores</span></button>
+    <button data-tab="empleados">👥 <span>Empleados</span></button>
+    <button data-tab="reportes">📤 <span>Reportes</span></button>
+    <button data-tab="facturacion">🧮 <span>Facturación</span></button>
   </aside>
 
   <main class="dash-main">
 
     <section class="tab-panel" id="tab-resumen">
-      <div class="dash-header"><h2>Resumen</h2></div>
-      <div class="stat-grid" id="stat-grid"></div>
-      <div class="panel">
-        <h3>Ventas recientes</h3>
-        <p style="color:var(--text-soft);font-size:.85rem;margin-top:-6px">Cada venta puede incluir varios productos; el total ya descuenta nada extra, es lo que pagó el cliente.</p>
-        <table id="table-sales-summary"><thead></thead><tbody></tbody></table>
+      <div class="dash-header"><h2>Resumen</h2><span class="dash-sub" id="summary-month"></span></div>
+
+      <div class="quick-actions">
+        <button class="quick-action" data-quick="venta"><span>💵</span>Nueva venta</button>
+        <button class="quick-action" data-quick="cotizacion"><span>📋</span>Cotización</button>
+        <button class="quick-action" data-quick="deuda"><span>🤝</span>Deuda</button>
       </div>
+
+      <div class="kpi-hero" id="kpi-hero"></div>
+      <div class="kpi-grid" id="stat-grid"></div>
+
       <div class="panel">
-        <h3>Productos más vistos</h3>
+        <div class="panel-head"><h3>Ventas recientes</h3><button class="link-btn" data-goto="finanzas">Ver todas →</button></div>
+        <div id="recent-sales" class="card-list"></div>
+      </div>
+
+      <details class="panel panel-collapsible">
+        <summary><h3>Productos más vistos</h3></summary>
         <div id="chart-views"><p class="empty-state">Sin datos todavía.</p></div>
-      </div>
-      <div class="panel">
-        <h3>Términos más buscados</h3>
+      </details>
+      <details class="panel panel-collapsible">
+        <summary><h3>Términos más buscados</h3></summary>
         <div id="chart-search"><p class="empty-state">Sin datos todavía.</p></div>
+      </details>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-finanzas">
+      <div class="dash-header">
+        <h2>Ventas y gastos</h2>
+        <button class="btn btn-primary btn-sm" id="btn-new-transaction">+ Registrar</button>
       </div>
+      <div class="segmented" id="tx-filter">
+        <button data-filter="all" class="active">Todo</button>
+        <button data-filter="venta">Ventas</button>
+        <button data-filter="gasto">Gastos</button>
+      </div>
+      <div id="tx-list" class="card-list"></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-cotizaciones">
+      <div class="dash-header">
+        <h2>Cotizaciones</h2>
+        <button class="btn btn-primary btn-sm" id="btn-new-quote">+ Nueva cotización</button>
+      </div>
+      <div id="quotes-list" class="card-list"></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-deudas">
+      <div class="dash-header">
+        <h2>Deudas</h2>
+        <button class="btn btn-primary btn-sm" id="btn-new-debt">+ Nueva deuda</button>
+      </div>
+      <div class="kpi-grid kpi-grid-2" id="debt-totals"></div>
+      <div class="segmented" id="debt-filter">
+        <button data-filter="pendiente" class="active">Pendientes</button>
+        <button data-filter="pagada">Pagadas</button>
+        <button data-filter="all">Todas</button>
+      </div>
+      <div id="debts-list" class="card-list"></div>
+    </section>
+
+    <section class="tab-panel hidden" id="tab-clientes">
+      <div class="dash-header"><h2>Clientes</h2><button class="btn btn-primary btn-sm" data-generic-new="clients">+ Nuevo cliente</button></div>
+      <div class="filter-bar"><input type="search" id="client-filter" placeholder="Buscar cliente..."></div>
+      <div class="panel panel-flush"><table id="table-clients" class="responsive-table"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="tab-panel hidden" id="tab-productos">
       <div class="dash-header">
         <h2>Productos</h2>
-        <div class="flex gap-8">
-          <button class="btn btn-outline btn-sm" id="btn-import-csv">📥 Importar CSV</button>
-          <button class="btn btn-outline btn-sm" id="btn-new-combo">🎁 Nuevo combo</button>
-          <button class="btn btn-primary btn-sm" id="btn-new-product">+ Nuevo producto</button>
+        <div class="header-actions">
+          <button class="btn btn-outline btn-sm" id="btn-import-csv">📥 CSV</button>
+          <button class="btn btn-outline btn-sm" id="btn-new-combo">🎁 Combo</button>
+          <button class="btn btn-primary btn-sm" id="btn-new-product">+ Producto</button>
         </div>
       </div>
       <input type="file" id="csv-file-input" accept=".csv" class="hidden">
       <div class="filter-bar">
-        <input type="text" id="product-filter-search" placeholder="Buscar por nombre...">
+        <input type="search" id="product-filter-search" placeholder="Buscar por nombre...">
         <select id="product-filter-sort">
           <option value="recent">Más reciente</option>
           <option value="price-asc">Precio: menor a mayor</option>
@@ -77,53 +128,40 @@
           <option value="name-asc">Nombre: A-Z</option>
         </select>
       </div>
-      <div class="stat-grid" id="inventory-totals" style="margin-bottom:16px"></div>
-      <p style="color:var(--text-soft);font-size:.85rem;margin:-10px 0 14px">Haz clic en un producto para ver su costo total en inventario.</p>
-      <div class="panel"><table id="table-productos"><thead></thead><tbody></tbody></table></div>
+      <div class="kpi-grid" id="inventory-totals"></div>
+      <p class="hint">Toca un producto para ver su costo en inventario.</p>
+      <div class="panel panel-flush"><table id="table-productos" class="responsive-table"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="tab-panel hidden" id="tab-secciones">
       <div class="dash-header"><h2>Secciones</h2><button class="btn btn-primary btn-sm" data-generic-new="categories">+ Nueva sección</button></div>
-      <div class="panel"><table id="table-categories"><thead></thead><tbody></tbody></table></div>
-    </section>
-
-    <section class="tab-panel hidden" id="tab-clientes">
-      <div class="dash-header"><h2>Clientes</h2><button class="btn btn-primary btn-sm" data-generic-new="clients">+ Nuevo cliente</button></div>
-      <div class="panel"><table id="table-clients"><thead></thead><tbody></tbody></table></div>
+      <div class="panel panel-flush"><table id="table-categories" class="responsive-table"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="tab-panel hidden" id="tab-proveedores">
       <div class="dash-header"><h2>Proveedores</h2><button class="btn btn-primary btn-sm" data-generic-new="providers">+ Nuevo proveedor</button></div>
-      <div class="panel"><table id="table-providers"><thead></thead><tbody></tbody></table></div>
+      <div class="panel panel-flush"><table id="table-providers" class="responsive-table"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="tab-panel hidden" id="tab-empleados">
       <div class="dash-header"><h2>Empleados</h2><button class="btn btn-primary btn-sm" data-generic-new="employees">+ Nuevo empleado</button></div>
-      <div class="panel"><table id="table-employees"><thead></thead><tbody></tbody></table></div>
-    </section>
-
-    <section class="tab-panel hidden" id="tab-finanzas">
-      <div class="dash-header"><h2>Ventas y gastos</h2><button class="btn btn-primary btn-sm" id="btn-new-transaction">+ Registrar movimiento</button></div>
-      <div class="panel"><table id="table-transactions"><thead></thead><tbody></tbody></table></div>
-    </section>
-
-    <section class="tab-panel hidden" id="tab-cotizaciones">
-      <div class="dash-header"><h2>Cotizaciones</h2><button class="btn btn-primary btn-sm" data-generic-new="quotes">+ Nueva cotización</button></div>
-      <div class="panel"><table id="table-quotes"><thead></thead><tbody></tbody></table></div>
+      <div class="panel panel-flush"><table id="table-employees" class="responsive-table"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="tab-panel hidden" id="tab-pedidos">
       <div class="dash-header"><h2>Pedidos recibidos</h2></div>
-      <div class="panel"><table id="table-orders"><thead></thead><tbody></tbody></table></div>
+      <div class="panel panel-flush"><table id="table-orders" class="responsive-table"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="tab-panel hidden" id="tab-reportes">
       <div class="dash-header"><h2>Reportes</h2></div>
       <div class="panel">
-        <p style="color:var(--text-soft)">Descarga tu información en formato CSV, lista para abrir en Excel.</p>
-        <div class="flex gap-8" style="flex-wrap:wrap">
+        <p class="hint">Descarga tu información en CSV, lista para abrir en Excel.</p>
+        <div class="report-grid">
           <button class="btn btn-outline" data-report="products">Productos</button>
           <button class="btn btn-outline" data-report="transactions">Ventas y gastos</button>
+          <button class="btn btn-outline" data-report="quotes">Cotizaciones</button>
+          <button class="btn btn-outline" data-report="debts">Deudas</button>
           <button class="btn btn-outline" data-report="orders">Pedidos</button>
           <button class="btn btn-outline" data-report="clients">Clientes</button>
         </div>
@@ -134,7 +172,7 @@
       <div class="dash-header"><h2>Facturación electrónica</h2></div>
       <div class="panel">
         <p>Para emitir factura electrónica válida ante la DIAN necesitas conectar un proveedor tecnológico autorizado (por ejemplo <strong>Factus</strong>, <strong>Alegra</strong> o <strong>Siigo</strong>).</p>
-        <p style="color:var(--text-soft)">Este panel queda listo para guardar tus credenciales cuando elijas un proveedor; por ahora tus comprobantes internos se generan automáticamente en la pestaña "Ventas y gastos".</p>
+        <p class="hint">Este panel queda listo para guardar tus credenciales cuando elijas un proveedor.</p>
         <div class="form-grid" style="margin-top:18px">
           <div class="field"><label>Proveedor</label><select disabled><option>Próximamente</option></select></div>
           <div class="field"><label>API Key</label><input disabled placeholder="Se habilita al elegir proveedor"></div>
@@ -149,9 +187,15 @@
   <div class="modal" id="modal-content"></div>
 </div>
 
+<!-- Aquí se dibuja (fuera de pantalla) la cotización antes de convertirla en imagen/PDF -->
+<div id="quote-render-host" aria-hidden="true"></div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/dashboard.js"></script>
+<script src="assets/ventas.js"></script>
 </body>
 </html>
