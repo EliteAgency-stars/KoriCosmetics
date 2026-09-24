@@ -879,6 +879,15 @@ tr:last-child td { border-bottom: none; }
 .pick-name { font-weight: 600; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-meta { font-size: .75rem; color: var(--text-soft); }
 .pick-add { width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.custom-toggle { width: 100%; margin-top: 8px; padding: 11px 14px; border-radius: 14px; border: 1.5px dashed var(--primary-light); background: transparent; color: var(--primary-dark); font-family: var(--font-body); font-weight: 600; font-size: .85rem; cursor: pointer; }
+:root[data-theme="dark"] .custom-toggle { color: var(--primary); }
+.custom-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px; border-radius: 14px; background: var(--bg-soft); }
+.custom-form > input { width: 100%; }
+.custom-row { display: flex; gap: 8px; align-items: center; }
+.custom-row .price-edit { max-width: none; }
+.modal .custom-row .price-edit input { border: none; width: 100%; min-width: 0; padding: 8px 8px 8px 2px; }
+.modal .custom-qty { width: 64px; text-align: center; padding: 8px 4px; flex-shrink: 0; }
+.modal .line-name-input { flex: 1; min-width: 0; font-weight: 700; font-size: .9rem; padding: 6px 10px; }
 .lines { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .line-edit { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; background: var(--bg-elevated); }
 .line-edit-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }

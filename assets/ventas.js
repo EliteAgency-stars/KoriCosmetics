@@ -92,7 +92,7 @@ async function readClientPicker({ required = false } = {}) {
 // ------------------------------------------------------------
 // Editor de productos (buscar, tocar para agregar, editar cantidad y precio)
 // ------------------------------------------------------------
-function createLineEditor(root, initialLines, { onChange, showStock = false } = {}) {
+function createLineEditor(root, initialLines, { onChange, showStock = false, allowCustom = false } = {}) {
   let lines = (initialLines || []).map(l => ({ ...l }));
   const catalog = (state.products || []).filter(p => p.active).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -101,6 +101,16 @@ function createLineEditor(root, initialLines, { onChange, showStock = false } = 
       <input type="search" class="picker-search" placeholder="🔍 Buscar producto para agregar..." autocomplete="off">
       <div class="picker-results"></div>
     </div>
+    ${allowCustom ? `
+      <button type="button" class="custom-toggle" data-custom-toggle>✏️ Agregar producto que no está en el catálogo</button>
+      <div class="custom-form hidden" data-custom-form>
+        <input type="text" data-custom-name placeholder="Nombre del producto" autocomplete="off">
+        <div class="custom-row">
+          <label class="price-edit"><span>$</span><input type="number" inputmode="numeric" min="0" step="100" data-custom-price placeholder="Precio"></label>
+          <input type="number" inputmode="numeric" min="1" value="1" data-custom-qty aria-label="Cantidad" class="custom-qty">
+          <button type="button" class="btn btn-primary btn-sm" data-custom-add>Agregar</button>
+        </div>
+      </div>` : ''}
     <div class="lines"></div>
   `;
   const search = qs('.picker-search', root);
@@ -130,7 +140,9 @@ function createLineEditor(root, initialLines, { onChange, showStock = false } = 
         return `
         <div class="line-edit">
           <div class="line-edit-top">
-            <strong>${esc(l.name)}</strong>
+            ${!l.product_id && allowCustom
+              ? `<input type="text" class="line-name-input" value="${esc(l.name)}" data-name="${i}" aria-label="Nombre del producto">`
+              : `<strong>${esc(l.name)}</strong>`}
             <button type="button" class="icon-x" data-rm="${i}" aria-label="Quitar">✕</button>
           </div>
           <div class="line-edit-controls">
@@ -191,8 +203,34 @@ function createLineEditor(root, initialLines, { onChange, showStock = false } = 
       const i = Number(e.target.dataset.price);
       lines[i].price = Math.max(0, money(e.target.value));
       refreshLine(i);
+    } else if (e.target.dataset.name !== undefined) {
+      lines[Number(e.target.dataset.name)].name = e.target.value;
     }
   });
+
+  // Productos libres (solo cotizaciones): no están en el catálogo, se guardan
+  // en la cotización con nombre, precio y cantidad, sin tocar el inventario.
+  if (allowCustom) {
+    const form = qs('[data-custom-form]', root);
+    const nameEl = qs('[data-custom-name]', root);
+    const priceEl = qs('[data-custom-price]', root);
+    const qtyEl = qs('[data-custom-qty]', root);
+    qs('[data-custom-toggle]', root).addEventListener('click', () => {
+      form.classList.toggle('hidden');
+      if (!form.classList.contains('hidden')) nameEl.focus();
+    });
+    function addCustom() {
+      const name = nameEl.value.trim();
+      if (!name) { nameEl.focus(); return alert('Escribe el nombre del producto.'); }
+      if (priceEl.value === '') { priceEl.focus(); return alert('Escribe el precio del producto.'); }
+      lines.push({ product_id: null, name, price: Math.max(0, money(priceEl.value)), qty: Math.max(1, Math.floor(Number(qtyEl.value)) || 1) });
+      nameEl.value = ''; priceEl.value = ''; qtyEl.value = 1;
+      form.classList.add('hidden');
+      renderLines();
+    }
+    qs('[data-custom-add]', root).addEventListener('click', addCustom);
+    form.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+  }
   linesEl.addEventListener('change', e => {
     if (e.target.dataset.qty !== undefined) e.target.value = lines[Number(e.target.dataset.qty)].qty;
   });
@@ -696,7 +734,7 @@ function openQuoteModal(row) {
   `, { wide: true });
 
   bindClientPicker();
-  const editor = createLineEditor(qs('#q-lines'), row ? quoteItems(row) : [], { onChange: update });
+  const editor = createLineEditor(qs('#q-lines'), row ? quoteItems(row) : [], { onChange: update, allowCustom: true });
   bindDiscount(update);
   function update() { const sub = editor.subtotal; paintTotals(sub, readDiscount(sub).amount); }
   update();
@@ -706,6 +744,7 @@ function openQuoteModal(row) {
     buttons.forEach(b => b.disabled = true);
     try {
       if (!editor.lines.length) throw new Error('Agrega al menos un producto a la cotización.');
+      if (editor.lines.some(l => !String(l.name).trim())) throw new Error('Hay un producto sin nombre.');
       const phone = qs('#q-phone').value.trim();
       if (!phone) throw new Error('Escribe el número de contacto que aparecerá en la cotización.');
       setContactPhone(phone);
@@ -720,7 +759,7 @@ function openQuoteModal(row) {
       const payload = {
         client_id: client.client_id,
         client_name: client.client_name,
-        items: editor.lines.map(l => ({ product_id: l.product_id, name: l.name, qty: l.qty, price: l.price })),
+        items: editor.lines.map(l => ({ product_id: l.product_id, name: String(l.name).trim(), qty: l.qty, price: l.price })),
         subtotal,
         discount_type: disc.type, discount_value: disc.value, discount_amount: disc.amount,
         total: subtotal - disc.amount,
