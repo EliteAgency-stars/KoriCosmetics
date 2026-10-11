@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Panel Admin — Kori Cosmetics</title>
 <link rel="icon" href="logo.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('kori_theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="is-dashboard">
@@ -16,7 +18,7 @@
     <div class="nav-actions">
       <span id="admin-email" class="admin-email"></span>
       <button class="btn btn-ghost btn-sm" id="logout-btn">Salir</button>
-      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
+      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob"></span></button>
     </div>
   </div>
 </nav>
@@ -25,18 +27,18 @@
 
 <div id="dash-app" class="dash-layout hidden">
   <aside class="dash-sidebar">
-    <button data-tab="resumen" class="active">📈 <span>Resumen</span></button>
-    <button data-tab="finanzas">💵 <span>Ventas</span></button>
-    <button data-tab="cotizaciones">📋 <span>Cotizaciones</span></button>
-    <button data-tab="deudas">🤝 <span>Deudas</span></button>
-    <button data-tab="clientes">🧑‍🤝‍🧑 <span>Clientes</span></button>
-    <button data-tab="productos">💄 <span>Productos</span></button>
-    <button data-tab="pedidos">🛍️ <span>Pedidos</span></button>
-    <button data-tab="secciones">🗂️ <span>Secciones</span></button>
-    <button data-tab="proveedores">🚚 <span>Proveedores</span></button>
-    <button data-tab="empleados">👥 <span>Empleados</span></button>
-    <button data-tab="reportes">📤 <span>Reportes</span></button>
-    <button data-tab="facturacion">🧮 <span>Facturación</span></button>
+    <button data-tab="resumen" class="active"><i class="ph ph-chart-line-up"></i><span>Resumen</span></button>
+    <button data-tab="finanzas"><i class="ph ph-money"></i><span>Ventas</span></button>
+    <button data-tab="cotizaciones"><i class="ph ph-clipboard-text"></i><span>Cotizaciones</span></button>
+    <button data-tab="deudas"><i class="ph ph-handshake"></i><span>Deudas</span></button>
+    <button data-tab="clientes"><i class="ph ph-users-three"></i><span>Clientes</span></button>
+    <button data-tab="productos"><i class="ph ph-palette"></i><span>Productos</span></button>
+    <button data-tab="pedidos"><i class="ph ph-shopping-bag"></i><span>Pedidos</span></button>
+    <button data-tab="secciones"><i class="ph ph-squares-four"></i><span>Secciones</span></button>
+    <button data-tab="proveedores"><i class="ph ph-truck"></i><span>Proveedores</span></button>
+    <button data-tab="empleados"><i class="ph ph-identification-badge"></i><span>Empleados</span></button>
+    <button data-tab="reportes"><i class="ph ph-export"></i><span>Reportes</span></button>
+    <button data-tab="facturacion"><i class="ph ph-receipt"></i><span>Facturación</span></button>
   </aside>
 
   <main class="dash-main">
@@ -45,9 +47,9 @@
       <div class="dash-header"><h2>Resumen</h2><span class="dash-sub" id="summary-month"></span></div>
 
       <div class="quick-actions">
-        <button class="quick-action" data-quick="venta"><span>💵</span>Nueva venta</button>
-        <button class="quick-action" data-quick="cotizacion"><span>📋</span>Cotización</button>
-        <button class="quick-action" data-quick="deuda"><span>🤝</span>Deuda</button>
+        <button class="quick-action" data-quick="venta"><i class="ph ph-money"></i>Nueva venta</button>
+        <button class="quick-action" data-quick="cotizacion"><i class="ph ph-clipboard-text"></i>Cotización</button>
+        <button class="quick-action" data-quick="deuda"><i class="ph ph-handshake"></i>Deuda</button>
       </div>
 
       <div class="kpi-hero" id="kpi-hero"></div>
@@ -113,12 +115,17 @@
       <div class="dash-header">
         <h2>Productos</h2>
         <div class="header-actions">
-          <button class="btn btn-outline btn-sm" id="btn-import-csv">📥 CSV</button>
-          <button class="btn btn-outline btn-sm" id="btn-new-combo">🎁 Combo</button>
+          <button class="btn btn-outline btn-sm" id="btn-import-csv"><i class="ph ph-file-csv"></i> CSV</button>
+          <button class="btn btn-outline btn-sm" id="btn-new-combo"><i class="ph ph-gift"></i> Combo</button>
           <button class="btn btn-primary btn-sm" id="btn-new-product">+ Producto</button>
         </div>
       </div>
       <input type="file" id="csv-file-input" accept=".csv" class="hidden">
+      <input type="file" id="quick-photo-input" accept="image/*" class="hidden">
+      <div class="segmented" id="product-filter-state">
+        <button data-filter="all" class="active">Todos</button>
+        <button data-filter="nophoto">Sin foto <span id="nophoto-count"></span></button>
+      </div>
       <div class="filter-bar">
         <input type="search" id="product-filter-search" placeholder="Buscar por nombre...">
         <select id="product-filter-sort">

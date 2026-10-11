@@ -59,10 +59,6 @@ function closeModal() {
 }
 qs('#modal-overlay').addEventListener('click', e => { if (e.target.id === 'modal-overlay') closeModal(); });
 
-function esc(v) {
-  if (v === null || v === undefined) return '';
-  return String(v).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-}
 
 // ============================================================
 // Generic CRUD engine (secciones, clientes, proveedores, empleados,
@@ -270,8 +266,12 @@ function renderProductsTable() {
   const table = qs('#table-productos');
   const term = (qs('#product-filter-search')?.value || '').trim().toLowerCase();
   const sort = qs('#product-filter-sort')?.value || 'recent';
+  const onlyNoPhoto = qs('#product-filter-state .active')?.dataset.filter === 'nophoto';
+  const noPhotoCount = state.products.filter(p => !p.image_url).length;
+  qs('#nophoto-count').textContent = noPhotoCount ? `(${noPhotoCount})` : '';
 
   let list = state.products.slice();
+  if (onlyNoPhoto) list = list.filter(p => !p.image_url);
   if (term) list = list.filter(p => p.name.toLowerCase().includes(term));
   if (sort === 'price-asc') list.sort((a, b) => a.price - b.price);
   else if (sort === 'price-desc') list.sort((a, b) => b.price - a.price);
@@ -280,7 +280,8 @@ function renderProductsTable() {
 
   table.querySelector('thead').innerHTML = `<tr><th></th><th>Nombre</th><th>Sección</th><th>Precio</th><th>Stock</th><th>Estado</th><th></th></tr>`;
   if (!list.length) {
-    table.querySelector('tbody').innerHTML = `<tr><td colspan="7" class="empty-state">${state.products.length ? 'Ningún producto coincide con el filtro.' : 'Aún no has creado productos.'}</td></tr>`;
+    const msg = onlyNoPhoto && !term ? 'Todos los productos tienen foto.' : state.products.length ? 'Ningún producto coincide con el filtro.' : 'Aún no has creado productos.';
+    table.querySelector('tbody').innerHTML = `<tr><td colspan="7" class="empty-state">${msg}</td></tr>`;
     return;
   }
   table.querySelector('tbody').innerHTML = list.map(p => {
@@ -292,13 +293,14 @@ function renderProductsTable() {
     const itemNetProfit = itemSaleValue - itemTotalCost;
     return `
     <tr class="product-row" data-row-toggle="${p.id}">
-      <td class="cell-thumb"><span class="row-chevron">▸</span>${p.image_url ? `<img src="${p.image_url}" class="row-thumb" loading="lazy">` : '<span class="row-thumb">💄</span>'}</td>
+      <td class="cell-thumb"><i class="ph ph-caret-right row-chevron"></i>${p.image_url ? `<img src="${p.image_url}" class="row-thumb" loading="lazy" alt="">` : `<button type="button" class="row-thumb thumb-upload" data-photo-upload="${p.id}" aria-label="Subir foto de ${esc(p.name)}"><i class="ph ph-camera-plus"></i></button>`}</td>
       <td class="cell-title">${esc(p.name)} ${p.is_combo ? '<span class="tag tag-combo">Combo</span>' : ''}</td>
       <td data-label="Sección">${p.categories ? esc(p.categories.name) : '—'}</td>
       <td data-label="Precio">${formatPrice(p.price)}</td>
       <td data-label="Stock">${p.stock <= 0 ? '<span class="tag tag-red">Agotado</span>' : p.stock}</td>
       <td data-label="Estado">${p.active ? '<span class="tag tag-green">Activo</span>' : '<span class="tag tag-red">Inactivo</span>'} ${p.featured ? '<span class="tag tag-neutral">Destacado</span>' : ''}</td>
       <td class="table-actions">
+        ${p.image_url ? '' : `<button class="btn btn-primary btn-sm" data-photo-upload="${p.id}"><i class="ph ph-camera"></i> Subir foto</button>`}
         <button class="btn btn-ghost btn-sm" data-edit-product="${p.id}">Editar</button>
         ${p.is_combo ? '' : `<button class="btn btn-ghost btn-sm" data-variants="${p.id}">Variantes</button>`}
         <button class="btn btn-ghost btn-sm" data-del="products:${p.id}">Eliminar</button>
@@ -319,7 +321,7 @@ function renderProductsTable() {
   }).join('');
 }
 qs('#table-productos').addEventListener('click', e => {
-  if (e.target.closest('.table-actions')) return;
+  if (e.target.closest('.table-actions, [data-photo-upload]')) return;
   const row = e.target.closest('[data-row-toggle]');
   if (!row) return;
   row.classList.toggle('expanded');
@@ -327,8 +329,64 @@ qs('#table-productos').addEventListener('click', e => {
 });
 qs('#product-filter-search').addEventListener('input', renderProductsTable);
 qs('#product-filter-sort').addEventListener('change', renderProductsTable);
+qs('#product-filter-state').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  qsa('#product-filter-state button').forEach(b => b.classList.toggle('active', b === btn));
+  renderProductsTable();
+});
+
+// Cola de fotos: los productos creados desde Claude llegan ocultos y sin foto.
+// Al subir la foto aquí, queda como portada y el producto se publica.
+let photoTargetId = null;
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-photo-upload]');
+  if (!btn) return;
+  photoTargetId = btn.dataset.photoUpload;
+  qs('#quick-photo-input').click();
+});
+qs('#quick-photo-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  const product = state.products.find(p => p.id === photoTargetId);
+  if (!file || !product) return;
+  const buttons = qsa(`[data-photo-upload="${product.id}"]`);
+  buttons.forEach(b => { b.disabled = true; b.classList.add('is-loading'); });
+  try {
+    const url = await uploadProductImage(file);
+    const images = [url, ...(product.images || [])];
+    const { error } = await supabase.from('products').update({ images, image_url: url, active: true }).eq('id', product.id);
+    if (error) throw error;
+    loadProducts();
+  } catch (err) {
+    buttons.forEach(b => { b.disabled = false; b.classList.remove('is-loading'); });
+    alert('No se pudo subir la foto: ' + err.message);
+  }
+});
 
 function computeTotal(base, tax) { return Math.round((base || 0) * (1 + (tax || 0) / 100)); }
+
+// Sube una foto al bucket reducida a máx. 1400px: las fotos del celular pesan
+// varios MB y así la tienda carga mucho más rápido. WebP si el navegador lo
+// soporta (Safari no lo exporta), si no JPEG; si no la puede leer, va tal cual.
+async function uploadProductImage(file) {
+  let blob = file;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
+    const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(bmp.width * scale), height: Math.round(bmp.height * scale) });
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const toBlob = type => new Promise(r => canvas.toBlob(r, type, 0.85));
+    let out = await toBlob('image/webp');
+    if (!out || out.type !== 'image/webp') out = await toBlob('image/jpeg');
+    if (out && out.size < file.size) blob = out;
+  } catch { /* formato que el navegador no decodifica */ }
+  const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop() || 'img');
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await supabase.storage.from('product-images').upload(path, blob, { contentType: blob.type || undefined });
+  if (error) throw error;
+  return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+}
 
 // Manejador de fotos reutilizable (producto normal y combos): agregar,
 // quitar y elegir portada, subiendo directo al bucket de Supabase.
@@ -355,11 +413,8 @@ function createImageManager({ containerId, fileInputId, initial, onChange }) {
     const files = [...e.target.files];
     e.target.value = '';
     for (const file of files) {
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-      const { error } = await supabase.storage.from('product-images').upload(path, file);
-      if (error) { alert('Error al subir imagen: ' + error.message); continue; }
-      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-      images.push(data.publicUrl);
+      try { images.push(await uploadProductImage(file)); }
+      catch (err) { alert('Error al subir imagen: ' + err.message); }
     }
     render();
   });
@@ -406,10 +461,10 @@ function openProductModal(row) {
       </form>
 
       <div class="live-preview">
-        <div class="preview-label">Vista previa — así se verá en la tienda</div>
+        <div class="preview-label">Vista previa en la tienda</div>
         <div class="tilt-stage" id="tilt-stage">
           <div class="tilt-card" id="tilt-card">
-            <span id="preview-placeholder" style="font-size:3rem">💄</span>
+            <i id="preview-placeholder" class="ph ph-image placeholder-icon"></i>
             <img id="preview-main-img" class="hidden" alt="">
           </div>
         </div>
@@ -418,7 +473,7 @@ function openProductModal(row) {
         <div class="preview-name" id="preview-name">Nombre del producto</div>
         <div class="preview-price" id="preview-price">$0</div>
         <p class="preview-desc" id="preview-desc"></p>
-        <button class="btn btn-primary btn-block" disabled>Agregar al carrito 🛍️</button>
+        <button class="btn btn-primary btn-block" disabled>Agregar al carrito</button>
       </div>
     </div>
   `, { wide: true });
@@ -568,7 +623,7 @@ async function openComboModal(row) {
             <div class="preview-label" style="text-align:left">Vista previa</div>
             <div class="tilt-stage" id="combo-item-tilt-stage">
               <div class="tilt-card" id="combo-item-tilt-card">
-                <span id="combo-item-placeholder" style="font-size:2.2rem">💄</span>
+                <i id="combo-item-placeholder" class="ph ph-image placeholder-icon"></i>
                 <img id="combo-item-preview-img" class="hidden" alt="">
               </div>
             </div>
@@ -588,10 +643,10 @@ async function openComboModal(row) {
       </form>
 
       <div class="live-preview">
-        <div class="preview-label">Vista previa — así se verá en la tienda</div>
+        <div class="preview-label">Vista previa en la tienda</div>
         <div class="tilt-stage" id="tilt-stage">
           <div class="tilt-card" id="tilt-card">
-            <span id="preview-placeholder" style="font-size:3rem">🎁</span>
+            <i id="preview-placeholder" class="ph ph-gift placeholder-icon"></i>
             <img id="preview-main-img" class="hidden" alt="">
           </div>
         </div>
@@ -601,7 +656,7 @@ async function openComboModal(row) {
         <div class="preview-name" id="preview-name">Nombre del combo</div>
         <div class="preview-price" id="preview-price">$0</div>
         <p class="preview-desc" id="preview-desc"></p>
-        <button class="btn btn-primary btn-block" disabled>Agregar al carrito 🛍️</button>
+        <button class="btn btn-primary btn-block" disabled>Agregar al carrito</button>
       </div>
     </div>
   `, { wide: true });
@@ -637,7 +692,7 @@ async function openComboModal(row) {
     wrap.innerHTML = comboItems.length
       ? comboItems.map((item, i) => `
         <div class="combo-item-row">
-          ${item.image_url ? `<img src="${item.image_url}">` : `<div class="placeholder-thumb">💄</div>`}
+          ${item.image_url ? `<img src="${item.image_url}">` : `<div class="placeholder-thumb"><i class="ph ph-image"></i></div>`}
           <span>${esc(item.name)}</span>
           <input type="number" min="1" value="${item.qty}" data-combo-qty="${i}">
           <button type="button" class="btn btn-ghost btn-sm" data-combo-change-img="${i}">Cambiar foto</button>
@@ -664,11 +719,8 @@ async function openComboModal(row) {
     qsa('[data-combo-file]', wrap).forEach(input => input.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-      const { error } = await supabase.storage.from('product-images').upload(path, file);
-      if (error) return alert('Error al subir imagen: ' + error.message);
-      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-      comboItems[Number(input.dataset.comboFile)].image_url = data.publicUrl;
+      try { comboItems[Number(input.dataset.comboFile)].image_url = await uploadProductImage(file); }
+      catch (err) { return alert('Error al subir imagen: ' + err.message); }
       renderComboItems();
     }));
   }
@@ -810,7 +862,7 @@ async function openVariantsModal(productId) {
   const sharedName = existingNames.length === 1 ? existingNames[0] : (existingNames[0] || 'Tono');
 
   openModal(`
-    <h3>Variantes — ${esc(product.name)}</h3>
+    <h3>Variantes: ${esc(product.name)}</h3>
     <p style="color:var(--text-soft);font-size:.85rem;margin:-6px 0 16px">Ej: los tonos de un labial, o los tamaños de un kit. Deja el precio vacío si esa opción cuesta igual que el producto (${formatPrice(product.price)}); ponle 0 de stock si por ahora no hay disponibilidad.</p>
     <table style="margin-bottom:16px">
       <thead><tr><th>Nombre</th><th>Valor</th><th>Precio</th><th>Stock</th><th></th></tr></thead>

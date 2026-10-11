@@ -9,18 +9,18 @@ window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ADMIN_EMAIL = 'koricosmetics@admin.com';
 
 // ---------- Theme ----------
-function initTheme() {
-  const saved = localStorage.getItem('kori_theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-  document.querySelectorAll('.theme-toggle .knob').forEach(k => k.textContent = saved === 'dark' ? '🌙' : '☀️');
+// Sin preferencia guardada, se sigue el modo claro/oscuro del sistema.
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.querySelectorAll('.theme-toggle .knob').forEach(k => k.innerHTML = `<i class="ph ph-${theme === 'dark' ? 'moon' : 'sun'}"></i>`);
 }
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', current);
-  localStorage.setItem('kori_theme', current);
-  document.querySelectorAll('.theme-toggle .knob').forEach(k => k.textContent = current === 'dark' ? '🌙' : '☀️');
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('kori_theme', next);
+  setTheme(next);
 }
-initTheme();
+setTheme(localStorage.getItem('kori_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- Helpers ----------
 function formatPrice(n) {
@@ -34,6 +34,10 @@ function slugify(name) {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+}
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 function qs(sel, root = document) { return root.querySelector(sel); }
 function qsa(sel, root = document) { return [...root.querySelectorAll(sel)]; }

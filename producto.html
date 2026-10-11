@@ -10,6 +10,8 @@
 <meta name="geo.placename" content="Corozal, Sincelejo, Sucre">
 <link rel="canonical" id="canonical-link" href="https://www.koricosmetics.fun/">
 <link rel="icon" href="logo.png">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('kori_theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="assets/style.css">
 
 <meta property="og:type" content="product">
@@ -29,8 +31,8 @@
     <div class="nav-links"><a href="index.html">Inicio</a><a href="index.html#catalogo">Catálogo</a></div>
     <div class="nav-actions">
       <div id="nav-auth-slot"></div>
-      <a href="carrito.html" class="icon-btn" aria-label="Carrito">🛍️<span class="cart-count" style="display:none">0</span></a>
-      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob">☀️</span></button>
+      <a href="carrito.html" class="icon-btn" aria-label="Carrito"><i class="ph ph-shopping-bag"></i><span class="cart-count" style="display:none">0</span></a>
+      <button class="theme-toggle" aria-label="Cambiar tema"><span class="knob"></span></button>
     </div>
   </div>
 </nav>
@@ -43,10 +45,10 @@
 
 <nav class="mobile-nav">
   <div class="mobile-nav-inner">
-    <a href="index.html" class="mobile-nav-item"><span class="icon">🏠</span><span>Inicio</span></a>
-    <a href="index.html#catalogo" class="mobile-nav-item active"><span class="icon">🗂️</span><span>Catálogo</span></a>
-    <a href="index.html?search=1#catalogo" class="mobile-nav-item"><span class="icon">🔍</span><span>Buscar</span></a>
-    <a href="carrito.html" class="mobile-nav-item"><span class="icon">🛍️</span><span class="cart-count" style="display:none">0</span><span>Carrito</span></a>
+    <a href="index.html" class="mobile-nav-item"><i class="ph ph-house icon"></i><span>Inicio</span></a>
+    <a href="index.html#catalogo" class="mobile-nav-item active"><i class="ph ph-squares-four icon"></i><span>Catálogo</span></a>
+    <a href="index.html?search=1#catalogo" class="mobile-nav-item"><i class="ph ph-magnifying-glass icon"></i><span>Buscar</span></a>
+    <a href="carrito.html" class="mobile-nav-item"><i class="ph ph-shopping-bag icon"></i><span class="cart-count" style="display:none">0</span><span>Carrito</span></a>
   </div>
 </nav>
 
@@ -79,7 +81,7 @@ async function loadProduct() {
     .maybeSingle();
 
   if (!product) {
-    content.innerHTML = `<div class="empty-state">No encontramos este producto 💔 <br><a href="index.html" style="color:var(--primary-dark);font-weight:600">Volver al catálogo</a></div>`;
+    content.innerHTML = `<div class="empty-state"><i class="ph ph-smiley-sad"></i>No encontramos este producto.<br><a href="index.html" class="btn btn-outline btn-sm" style="margin-top:14px">Volver al catálogo</a></div>`;
     return;
   }
 
@@ -138,14 +140,14 @@ async function loadProduct() {
     <div class="product-detail ${product.is_combo ? 'is-combo' : ''}">
       <div>
         <div class="tilt-stage" id="gallery-tilt-stage">
-          <div class="detail-gallery" id="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<span style="font-size:4rem">${product.is_combo ? '🎁' : '💄'}</span>`}</div>
+          <div class="detail-gallery" id="detail-gallery">${images.length ? `<img id="gallery-main-img" src="${images[0]}" alt="${product.name}">` : `<i class="ph ph-${product.is_combo ? 'gift' : 'image'} placeholder-icon"></i>`}</div>
         </div>
         ${images.length > 1 ? `<div class="gallery-thumbs">${images.map((url, i) => `<img src="${url}" class="${i === 0 ? 'active' : ''}" data-thumb="${i}">`).join('')}</div>` : ''}
       </div>
       <div class="detail-info">
-        ${product.is_combo ? '<span class="badge-combo" style="position:static;display:inline-block;margin-bottom:8px">🎁 Combo</span>' : ''}
+        ${product.is_combo ? '<span class="badge-combo" style="position:static;display:inline-flex;gap:4px;margin-bottom:8px"><i class="ph ph-gift"></i> Combo</span>' : ''}
         <span class="product-cat">${product.categories ? product.categories.name : 'Kori Cosmetics'}</span>
-        <h1>${product.name}</h1>
+        <h1>${esc(product.name)}</h1>
         <div class="rating-summary" id="rating-summary"></div>
         <p style="color:var(--text-soft)">${product.description || ''}</p>
         <div class="detail-price" id="detail-price">${formatPrice(product.price)}</div>
@@ -169,7 +171,7 @@ async function loadProduct() {
           </div>
           <span style="color:var(--text-soft);font-size:.88rem">${product.stock > 0 ? product.stock + ' disponibles' : 'Sin stock'}</span>
         </div>
-        <button class="btn btn-primary btn-block" id="add-to-cart" ${product.stock <= 0 ? 'disabled' : ''}>Agregar al carrito 🛍️</button>
+        <button class="btn btn-primary btn-block" id="add-to-cart" ${product.stock <= 0 ? 'disabled' : ''}><i class="ph ph-shopping-bag"></i> ${product.stock <= 0 ? 'Agotado' : 'Agregar al carrito'}</button>
       </div>
     </div>
 
@@ -213,7 +215,7 @@ async function loadProduct() {
   // Efecto 3D: la foto principal se inclina siguiendo el mouse.
   const galleryStage = qs('#gallery-tilt-stage');
   const galleryCard = qs('#detail-gallery');
-  galleryStage.addEventListener('mousemove', e => {
+  if (!prefersReducedMotion) galleryStage.addEventListener('mousemove', e => {
     const rect = galleryStage.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
     const y = (e.clientY - rect.top) / rect.height - 0.5;
@@ -263,8 +265,8 @@ async function loadProduct() {
       image: product.image_url, variant: selectedVariant, qty,
     });
     const btn = qs('#add-to-cart');
-    btn.textContent = 'Agregado ✓';
-    setTimeout(() => btn.textContent = 'Agregar al carrito 🛍️', 1200);
+    btn.innerHTML = '<i class="ph ph-check"></i> Agregado';
+    setTimeout(() => btn.innerHTML = '<i class="ph ph-shopping-bag"></i> Agregar al carrito', 1200);
   });
 
   // ---------- Reseñas ----------
@@ -327,18 +329,16 @@ async function loadProduct() {
   // ---------- Recomendaciones ----------
   function productCardHTML(p) {
     return `
-      <div class="product-card ${p.is_combo ? 'is-combo' : ''}">
-        <a href="/${p.slug}">
+      <article class="product-card ${p.is_combo ? 'is-combo' : ''}">
+        <a href="/${encodeURIComponent(p.slug)}" class="product-link">
           <div class="product-thumb">
-            ${p.is_combo ? '<span class="badge-combo">🎁 Combo</span>' : ''}
-            ${p.image_url ? `<img src="${p.image_url}" alt="${esc(p.name)}">` : `<span class="placeholder">💄</span>`}
+            ${p.is_combo ? '<span class="badge-combo"><i class="ph ph-gift"></i> Combo</span>' : ''}
+            ${p.image_url ? `<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">` : '<i class="ph ph-image placeholder"></i>'}
           </div>
+          <div class="product-body"><span class="product-name">${esc(p.name)}</span></div>
+          <div class="product-foot"><span class="product-price">${formatPrice(p.price)}</span></div>
         </a>
-        <div class="product-body">
-          <a href="/${p.slug}"><span class="product-name">${esc(p.name)}</span></a>
-          <span class="product-price">${formatPrice(p.price)}</span>
-        </div>
-      </div>
+      </article>
     `;
   }
 
@@ -370,8 +370,6 @@ async function loadProduct() {
   loadRelated();
   loadRecommended();
 }
-
-function esc(v) { return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 loadProduct();
 </script>
